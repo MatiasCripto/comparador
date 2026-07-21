@@ -1,0 +1,181 @@
+{
+  "name": "WF4 - Descubrimiento de Tiendas",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "descubrir-tienda",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d1b2c3d4-0001-0001-0001-000000000001",
+      "name": "Webhook Descubrir",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "descubrir-tienda-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst rubro = body.rubro || 'supermercado';\nconst ciudad = body.ciudad || 'Argentina';\nconst limit = body.limit || 10;\n\nconst searchQuery = `tienda online ${rubro} ${ciudad} site:*.com.ar OR site:*.ar precios`;\n\nreturn [{ json: { rubro, ciudad, limit, searchQuery } }];"
+      },
+      "id": "d1b2c3d4-0002-0002-0002-000000000002",
+      "name": "Armar Query SerpAPI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://serpapi.com/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "api_key", "value": "YOUR_SERPAPI_KEY" },
+            { "name": "engine", "value": "google" },
+            { "name": "q", "value": "={{ $json.searchQuery }}" },
+            { "name": "location", "value": "Argentina" },
+            { "name": "gl", "value": "ar" },
+            { "name": "hl", "value": "es" },
+            { "name": "num", "value": "={{ $json.limit }}" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "d1b2c3d4-0003-0003-0003-000000000003",
+      "name": "SerpAPI Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const serpData = $input.first().json;\nconst prevData = $('Armar Query SerpAPI').first().json;\nconst results = serpData.organic_results || [];\n\nconst sites = results\n  .filter(r => r.link && (r.link.includes('.com.ar') || r.link.includes('.ar')))\n  .map(r => ({\n    name: r.title?.replace(/ - .*$/, '').trim() || 'Tienda',\n    url: new URL(r.link).origin,\n    full_url: r.link,\n    snippet: r.snippet || '',\n    category: prevData.rubro,\n    city: prevData.ciudad !== 'Argentina' ? prevData.ciudad : null\n  }))\n  .filter((v, i, a) => a.findIndex(t => t.url === v.url) === i) // dedup por dominio\n  .slice(0, prevData.limit);\n\nreturn [{ json: { sites, rubro: prevData.rubro, ciudad: prevData.ciudad, total: sites.length } }];"
+      },
+      "id": "d1b2c3d4-0004-0004-0004-000000000004",
+      "name": "Parsear Resultados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst sites = data.sites || [];\n\nif (sites.length === 0) {\n  return [{ json: { skip: true } }];\n}\n\nconst siteList = sites.map((s, i) => `${i+1}. Nombre: \"${s.name}\" | URL: ${s.url} | Descripcion: \"${s.snippet}\"`).join('\\n');\n\nconst prompt = `Sos un experto en e-commerce argentino. Analizá estas tiendas online del rubro \"${data.rubro}\" y para cada una intentá adivinar los selectores CSS más probables para scrapear sus productos.\n\nTiendas:\n${siteList}\n\nPara cada tienda devolvé un JSON array:\n[\n  {\n    \"index\": 1,\n    \"name\": \"nombre de la tienda\",\n    \"url\": \"url base\",\n    \"scraping_url\": \"URL más probable de su listado de productos (ej: /productos, /catalogo, /tienda)\",\n    \"platform\": \"plataforma detectada (Tiendanube/WooCommerce/Shopify/Magento/custom/desconocido)\",\n    \"product_selector\": \"selector CSS para el contenedor de producto\",\n    \"name_selector\": \"selector CSS para nombre\",\n    \"price_selector\": \"selector CSS para precio\",\n    \"pagination_selector\": \"selector CSS para siguiente pagina o null\",\n    \"confidence\": \"alta/media/baja\"\n  }\n]\n\nPara Tiendanube: product_selector suele ser .js-item-product, name suele ser .item-name, price suele ser .price__value\nPara WooCommerce: product_selector suele ser .product, name .woocommerce-loop-product__title, price .price\nPara Shopify: varía pero suele ser .product-card, .product-title, .price\n\nDevolvé SOLO el JSON array.`;\n\nreturn [{ json: { ...data, prompt } }];"
+      },
+      "id": "d1b2c3d4-0005-0005-0005-000000000005",
+      "name": "Prompt Detectar Selectores",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_GROQ_API_KEY" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [{ \"role\": \"user\", \"content\": \"{{ $json.prompt }}\" }],\n  \"temperature\": 0.2,\n  \"max_tokens\": 3000\n}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "d1b2c3d4-0006-0006-0006-000000000006",
+      "name": "Groq Detectar Plataforma",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const groqResponse = $input.first().json;\nconst prevData = $('Prompt Detectar Selectores').first().json;\n\nlet analyzed = [];\ntry {\n  const content = groqResponse.choices[0].message.content;\n  const jsonMatch = content.match(/\\[\\s*\\{[\\s\\S]*\\}\\s*\\]/);\n  if (jsonMatch) analyzed = JSON.parse(jsonMatch[0]);\n} catch(e) {\n  console.log('Error parseando IA:', e.message);\n}\n\nconst sites = prevData.sites || [];\n\nconst storeInserts = analyzed.map(a => {\n  const original = sites[a.index - 1] || {};\n  return {\n    name: a.name || original.name,\n    url: a.scraping_url ? \n      (a.scraping_url.startsWith('http') ? a.scraping_url : original.url + a.scraping_url)\n      : original.url,\n    category: prevData.rubro,\n    city: prevData.ciudad !== 'Argentina' ? prevData.ciudad : null,\n    scraping_enabled: false, // requiere validacion manual\n    scraping_config: {\n      product_selector: a.product_selector || '.product',\n      name_selector: a.name_selector || '.product-name',\n      price_selector: a.price_selector || '.price',\n      pagination: !!a.pagination_selector,\n      pagination_selector: a.pagination_selector || null,\n      max_pages: 3,\n      platform: a.platform || 'desconocido',\n      confidence: a.confidence || 'baja'\n    }\n  };\n});\n\nreturn [{ json: { store_inserts: storeInserts, total: storeInserts.length } }];"
+      },
+      "id": "d1b2c3d4-0007-0007-0007-000000000007",
+      "name": "Preparar Stores para DB",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ygqfbbkjdiryilwjrpzh.supabase.co/rest/v1/stores",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "resolution=ignore-duplicates" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.store_inserts) }}",
+        "options": {}
+      },
+      "id": "d1b2c3d4-0008-0008-0008-000000000008",
+      "name": "Insert Stores Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"message\": \"{{ $('Preparar Stores para DB').first().json.total }} tiendas descubiertas y guardadas (pendientes de validacion manual)\",\n  \"stores\": {{ JSON.stringify($('Preparar Stores para DB').first().json.store_inserts) }}\n}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" },
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "d1b2c3d4-0009-0009-0009-000000000009",
+      "name": "Responder Resultado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Descubrir": {
+      "main": [[{ "node": "Armar Query SerpAPI", "type": "main", "index": 0 }]]
+    },
+    "Armar Query SerpAPI": {
+      "main": [[{ "node": "SerpAPI Search", "type": "main", "index": 0 }]]
+    },
+    "SerpAPI Search": {
+      "main": [[{ "node": "Parsear Resultados", "type": "main", "index": 0 }]]
+    },
+    "Parsear Resultados": {
+      "main": [[{ "node": "Prompt Detectar Selectores", "type": "main", "index": 0 }]]
+    },
+    "Prompt Detectar Selectores": {
+      "main": [[{ "node": "Groq Detectar Plataforma", "type": "main", "index": 0 }]]
+    },
+    "Groq Detectar Plataforma": {
+      "main": [[{ "node": "Preparar Stores para DB", "type": "main", "index": 0 }]]
+    },
+    "Preparar Stores para DB": {
+      "main": [[{ "node": "Insert Stores Supabase", "type": "main", "index": 0 }]]
+    },
+    "Insert Stores Supabase": {
+      "main": [[{ "node": "Responder Resultado", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": ["precios-ar", "descubrimiento"],
+  "triggerCount": 0
+}

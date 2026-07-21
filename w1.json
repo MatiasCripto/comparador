@@ -1,0 +1,294 @@
+{
+  "name": "WF1 - Scraping + Normalizacion",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 6 }]
+        }
+      },
+      "id": "wf1-0001",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://ygqfbbkjdiryilwjrpzh.supabase.co/rest/v1/stores?scraping_enabled=eq.true&select=*",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "wf1-0002",
+      "name": "Leer Tiendas Activas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json;\nconst stores = Array.isArray(body) ? body : [];\nif (stores.length === 0) throw new Error('No hay tiendas activas');\nreturn stores.map(s => ({ json: s }));"
+      },
+      "id": "wf1-0003",
+      "name": "Split Tiendas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "wf1-0004",
+      "name": "Loop por Tienda",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "timeout": 30000,
+          "response": { "response": { "responseFormat": "text" } },
+          "headers": {
+            "parameters": [
+              { "name": "User-Agent", "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+              { "name": "Accept-Language", "value": "es-AR,es;q=0.9" }
+            ]
+          }
+        }
+      },
+      "id": "wf1-0005",
+      "name": "Fetch HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer productos con regex basado en selectores de la config\n// n8n no tiene Cheerio nativo — usamos el HTML que viene como texto\nconst item = $input.first().json;\nconst html = typeof item === 'string' ? item : (item.data || item.body || JSON.stringify(item));\nconst store = $('Loop por Tienda').first().json;\nconst config = store.scraping_config || {};\n\nif (!html || html.length < 200) {\n  return [{ json: {\n    store_id: store.id,\n    store_name: store.name,\n    store_category: store.category,\n    base_url: store.url,\n    config,\n    products_raw: [],\n    error: 'HTML vacio o muy corto'\n  }}];\n}\n\n// Convertir selector CSS a regex aproximado\n// Ejemplo: .product-item -> class=\"...product-item...\"\nfunction selectorToPattern(selector) {\n  if (!selector) return null;\n  const cls = selector.replace(/^[.#]/, '').replace(/-/g, '[-_]?');\n  return new RegExp(`class=[\"'][^\"']*${cls}[^\"']*[\"']([\\\\s\\\\S]*?)(?=class=[\"'][^\"']*${cls}|$)`, 'gi');\n}\n\n// Extraer texto entre tags\nfunction extractText(html, selector) {\n  if (!selector || !html) return '';\n  const cls = selector.replace(/^[.#]/, '');\n  const pattern = new RegExp(`class=[\"'][^\"']*${cls}[^\"']*[\"'][^>]*>([^<]+)<`, 'i');\n  const match = html.match(pattern);\n  return match ? match[1].trim() : '';\n}\n\n// Extraer href\nfunction extractHref(block, baseUrl) {\n  const m = block.match(/href=[\"']([^\"']+)[\"']/);\n  if (!m) return '';\n  return m[1].startsWith('http') ? m[1] : baseUrl.replace(/\\/[^\\/]*$/, '') + m[1];\n}\n\n// Extraer src de img\nfunction extractImg(block) {\n  const m = block.match(/(?:src|data-src)=[\"']([^\"']+\\.(?:jpg|jpeg|png|webp))[\"']/i);\n  return m ? m[1] : '';\n}\n\n// Limpiar precio\nfunction parsePrice(raw) {\n  if (!raw) return NaN;\n  const clean = raw.replace(/[^0-9,.]/g, '').replace(/\\./g, '').replace(',', '.');\n  return parseFloat(clean);\n}\n\nconst products = [];\nconst productSelector = config.product_selector || '.product';\nconst nameSel = config.name_selector || '.name';\nconst priceSel = config.price_selector || '.price';\n\n// Dividir HTML en bloques de productos\nconst cls = productSelector.replace(/^[.#]/, '');\nconst blockPattern = new RegExp(`<[^>]+class=[\"'][^\"']*${cls}[^\"']*[\"'][^>]*>([\\\\s\\\\S]{50,2000}?)(?=<[^>]+class=[\"'][^\"']*${cls}|$)`, 'gi');\n\nlet match;\nwhile ((match = blockPattern.exec(html)) !== null && products.length < 100) {\n  const block = match[0];\n  const name = extractText(block, nameSel);\n  const priceRaw = extractText(block, priceSel);\n  const price = parsePrice(priceRaw);\n  if (name && name.length > 2 && !isNaN(price) && price > 0) {\n    products.push({\n      raw_name: name,\n      price,\n      product_url: extractHref(block, store.url),\n      image_url: extractImg(block)\n    });\n  }\n}\n\nreturn [{ json: {\n  store_id: store.id,\n  store_name: store.name,\n  store_category: store.category,\n  base_url: store.url,\n  config,\n  products_raw: products,\n  total_found: products.length\n}}];"
+      },
+      "id": "wf1-0006",
+      "name": "Extraer Productos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst products = data.products_raw || [];\n\nif (products.length === 0) {\n  return [{ json: { ...data, normalized_products: [], skip_db: true } }];\n}\n\n// Procesar en batches de 20 y armar UN solo prompt por batch\n// Devolvemos array de batches para que el nodo siguiente los itere\nconst BATCH_SIZE = 20;\nconst batches = [];\nfor (let i = 0; i < products.length; i += BATCH_SIZE) {\n  batches.push(products.slice(i, i + BATCH_SIZE));\n}\n\nreturn [{ json: { ...data, batches, current_batch_index: 0, normalized_products: [] } }];"
+      },
+      "id": "wf1-0007",
+      "name": "Preparar Batches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar TODOS los batches en un solo nodo con loop interno\n// Esto evita problemas de contexto entre nodos en n8n\nconst data = $input.first().json;\nconst batches = data.batches || [];\n\nif (batches.length === 0) {\n  return [{ json: { ...data, normalized_products: [], done: true } }];\n}\n\n// Armar prompt para el primer batch pendiente\nconst idx = data.current_batch_index || 0;\nconst batch = batches[idx];\n\nconst productList = batch\n  .map((p, i) => `${i + 1}. \"${p.raw_name}\" - $${p.price}`)\n  .join('\\n');\n\nconst prompt = `Sos un experto en productos de Argentina. Normalizá estos nombres de productos del rubro \"${data.store_category}\".\n\nDevolvé SOLO un JSON array con este formato:\n[\n  {\n    \"index\": 1,\n    \"canonical_name\": \"Nombre claro y completo del producto\",\n    \"category\": \"categoria\",\n    \"subcategory\": \"subcategoria o null\",\n    \"brand\": \"marca o null\",\n    \"unit\": \"litro/kg/unidad/m2/etc o null\",\n    \"quantity\": numero o null\n  }\n]\n\nProductos:\n${productList}\n\nReglas:\n- canonical_name debe ser descriptivo: \"Pintura Látex Interior Blanco 4L\" no \"Pint Lat Bco\"\n- Detectá marca si está en el nombre\n- Devolvé SOLO el JSON array, sin texto adicional`;\n\nreturn [{ json: { ...data, current_batch: batch, prompt, current_batch_index: idx } }];"
+      },
+      "id": "wf1-0008",
+      "name": "Armar Prompt Batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_GROQ_API_KEY" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [{ \"role\": \"user\", \"content\": {{ JSON.stringify($json.prompt) }} }],\n  \"temperature\": 0.1,\n  \"max_tokens\": 4000\n}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "wf1-0009",
+      "name": "Groq Normalizar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const groqResp = $input.first().json;\nconst prev = $('Armar Prompt Batch').first().json;\n\nlet normalized = [];\ntry {\n  const content = groqResp.choices[0].message.content;\n  const match = content.match(/\\[\\s*\\{[\\s\\S]*?\\}\\s*\\]/);\n  if (match) normalized = JSON.parse(match[0]);\n} catch(e) { normalized = []; }\n\nconst batch = prev.current_batch || [];\nconst merged = batch.map((orig, i) => {\n  const norm = normalized.find(n => n.index === i + 1) || {};\n  return {\n    raw_name: orig.raw_name,\n    price: orig.price,\n    product_url: orig.product_url,\n    image_url: orig.image_url,\n    canonical_name: norm.canonical_name || orig.raw_name,\n    category: norm.category || prev.store_category,\n    subcategory: norm.subcategory || null,\n    brand: norm.brand || null,\n    unit: norm.unit || null,\n    quantity: norm.quantity || null\n  };\n});\n\nconst allNormalized = [...(prev.normalized_products || []), ...merged];\nconst nextIndex = (prev.current_batch_index || 0) + 1;\nconst done = nextIndex >= (prev.batches || []).length;\n\nreturn [{ json: {\n  ...prev,\n  normalized_products: allNormalized,\n  current_batch_index: nextIndex,\n  done\n}}];"
+      },
+      "id": "wf1-0010",
+      "name": "Acumular Normalizados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "cond-done",
+              "leftValue": "={{ $json.done }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf1-0011",
+      "name": "Todos Batches Listos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst storeId = data.store_id;\n\nconst productInserts = (data.normalized_products || []).map(p => ({\n  store_id: storeId,\n  canonical_name: p.canonical_name,\n  raw_name: p.raw_name,\n  category: p.category,\n  subcategory: p.subcategory || null,\n  brand: p.brand || null,\n  unit: p.unit || null,\n  quantity: p.quantity || null,\n  product_url: p.product_url || null,\n  image_url: p.image_url || null,\n  updated_at: new Date().toISOString()\n}));\n\nreturn [{ json: {\n  store_id: storeId,\n  store_name: data.store_name,\n  product_inserts: productInserts,\n  prices_map: data.normalized_products.reduce((acc, p) => {\n    acc[p.canonical_name] = p.price;\n    return acc;\n  }, {}),\n  total: productInserts.length\n}}];"
+      },
+      "id": "wf1-0012",
+      "name": "Preparar Upsert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2660, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ygqfbbkjdiryilwjrpzh.supabase.co/rest/v1/products",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "resolution=merge-duplicates,return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.product_inserts) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "wf1-0013",
+      "name": "Upsert Products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2880, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const inserted = $input.first().json;\nconst prev = $('Preparar Upsert').first().json;\nconst arr = Array.isArray(inserted) ? inserted : [];\n\nconst priceInserts = arr\n  .map(p => ({\n    product_id: p.id,\n    store_id: p.store_id,\n    price: prev.prices_map[p.canonical_name] || 0,\n    scraped_at: new Date().toISOString()\n  }))\n  .filter(p => p.price > 0);\n\nreturn [{ json: {\n  store_id: prev.store_id,\n  store_name: prev.store_name,\n  price_inserts: priceInserts,\n  total_products: prev.total,\n  total_prices: priceInserts.length\n}}];"
+      },
+      "id": "wf1-0014",
+      "name": "Preparar Precios",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3100, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ygqfbbkjdiryilwjrpzh.supabase.co/rest/v1/prices",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.price_inserts) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "wf1-0015",
+      "name": "Insert Prices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3320, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ygqfbbkjdiryilwjrpzh.supabase.co/rest/v1/scraping_logs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"store_id\": \"{{ $('Preparar Precios').first().json.store_id }}\",\n  \"status\": \"success\",\n  \"products_found\": {{ $('Preparar Precios').first().json.total_products }},\n  \"products_updated\": {{ $('Preparar Precios').first().json.total_prices }},\n  \"scraped_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "wf1-0016",
+      "name": "Log Exito",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3540, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ygqfbbkjdiryilwjrpzh.supabase.co/rest/v1/scraping_logs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"store_id\": null,\n  \"status\": \"error\",\n  \"error_message\": \"{{ $json.message || 'Error desconocido en scraping' }}\",\n  \"error_details\": {{ JSON.stringify($json) }},\n  \"scraped_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "wf1-0017",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2660, 520]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": { "main": [[{ "node": "Leer Tiendas Activas", "type": "main", "index": 0 }]] },
+    "Leer Tiendas Activas": { "main": [[{ "node": "Split Tiendas", "type": "main", "index": 0 }]] },
+    "Split Tiendas": { "main": [[{ "node": "Loop por Tienda", "type": "main", "index": 0 }]] },
+    "Loop por Tienda": { "main": [[{ "node": "Fetch HTML", "type": "main", "index": 0 }]] },
+    "Fetch HTML": { "main": [[{ "node": "Extraer Productos", "type": "main", "index": 0 }]] },
+    "Extraer Productos": { "main": [[{ "node": "Preparar Batches", "type": "main", "index": 0 }]] },
+    "Preparar Batches": { "main": [[{ "node": "Armar Prompt Batch", "type": "main", "index": 0 }]] },
+    "Armar Prompt Batch": { "main": [[{ "node": "Groq Normalizar", "type": "main", "index": 0 }]] },
+    "Groq Normalizar": { "main": [[{ "node": "Acumular Normalizados", "type": "main", "index": 0 }]] },
+    "Acumular Normalizados": { "main": [[{ "node": "Todos Batches Listos?", "type": "main", "index": 0 }]] },
+    "Todos Batches Listos?": {
+      "main": [
+        [{ "node": "Preparar Upsert", "type": "main", "index": 0 }],
+        [{ "node": "Armar Prompt Batch", "type": "main", "index": 0 }]
+      ]
+    },
+    "Preparar Upsert": { "main": [[{ "node": "Upsert Products", "type": "main", "index": 0 }]] },
+    "Upsert Products": { "main": [[{ "node": "Preparar Precios", "type": "main", "index": 0 }]] },
+    "Preparar Precios": { "main": [[{ "node": "Insert Prices", "type": "main", "index": 0 }]] },
+    "Insert Prices": { "main": [[{ "node": "Log Exito", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "tags": ["precios-ar", "scraping"]
+}

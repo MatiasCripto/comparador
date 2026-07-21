@@ -1,0 +1,178 @@
+{
+  "name": "WF3 - Monitor Alertas",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 6 }]
+        }
+      },
+      "id": "wf3-0001",
+      "name": "Schedule 6hs",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://ygqfbbkjdiryilwjrpzh.supabase.co/rest/v1/price_alerts?is_active=eq.true&select=*",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "wf3-0002",
+      "name": "Leer Alertas Activas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json;\nconst alerts = Array.isArray(body) ? body : [];\nif (alerts.length === 0) {\n  return [{ json: { skip: true, message: 'Sin alertas activas' } }];\n}\nreturn alerts.map(a => ({ json: a }));"
+      },
+      "id": "wf3-0003",
+      "name": "Split Alertas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "wf3-0004",
+      "name": "Loop por Alerta",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $input.first().json;\n\n// Buscar precio actual en latest_prices\nconst encoded = encodeURIComponent(alert.canonical_name);\nlet url = `https://ygqfbbkjdiryilwjrpzh.supabase.co/rest/v1/latest_prices?canonical_name=ilike.*${encoded}*&order=price.asc&limit=10`;\n\nif (alert.province) {\n  url += `&province=eq.${encodeURIComponent(alert.province)}`;\n}\n\nreturn [{ json: { alert, query_url: url } }];"
+      },
+      "id": "wf3-0005",
+      "name": "Preparar Query Precio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.query_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" }
+          ]
+        },
+        "options": { "timeout": 10000 }
+      },
+      "id": "wf3-0006",
+      "name": "Fetch Precios Actuales",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prices = $input.first().json;\nconst prev = $('Preparar Query Precio').first().json;\nconst alert = prev.alert;\nconst arr = Array.isArray(prices) ? prices : [];\n\nif (arr.length === 0) {\n  return [{ json: { should_notify: false, alert, reason: 'sin_precios' } }];\n}\n\nconst cheapest = arr[0];\nconst currentPrice = cheapest.price;\nconst targetPrice = alert.target_price;\n\n// Lógica de cuándo crear notificación:\n// 1. Precio objetivo alcanzado\n// 2. Nunca se notificó antes\n// 3. Han pasado más de 24hs desde la última notificación (resumen diario)\nconst priceReached = targetPrice != null && currentPrice <= targetPrice;\nconst neverNotified = !alert.last_notified_at;\nconst lastNotified = alert.last_notified_at ? new Date(alert.last_notified_at) : null;\nconst hoursAgo = lastNotified ? (Date.now() - lastNotified.getTime()) / 1000 / 60 / 60 : Infinity;\nconst shouldRefresh = hoursAgo >= 24;\n\nconst should_notify = priceReached || neverNotified || shouldRefresh;\n\nreturn [{ json: {\n  should_notify,\n  alert,\n  cheapest,\n  all_prices: arr,\n  current_price: currentPrice,\n  target_price: targetPrice || null,\n  price_reached: priceReached,\n  reason: priceReached ? 'precio_alcanzado' : neverNotified ? 'primera_vez' : 'refresco_diario'\n}}];"
+      },
+      "id": "wf3-0007",
+      "name": "Evaluar Condicion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "cond-notify",
+              "leftValue": "={{ $json.should_notify }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf3-0008",
+      "name": "Debe Notificar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ygqfbbkjdiryilwjrpzh.supabase.co/rest/v1/notifications",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"user_email\": \"{{ $json.alert.user_email }}\",\n  \"alert_id\": \"{{ $json.alert.id }}\",\n  \"canonical_name\": \"{{ $json.alert.canonical_name }}\",\n  \"cheapest_store\": \"{{ $json.cheapest.store_name }}\",\n  \"cheapest_price\": {{ $json.current_price }},\n  \"target_price\": {{ $json.target_price !== null ? $json.target_price : 'null' }},\n  \"price_reached\": {{ $json.price_reached }},\n  \"reason\": \"{{ $json.reason }}\",\n  \"all_prices\": {{ JSON.stringify($json.all_prices) }},\n  \"read\": false,\n  \"created_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "wf3-0009",
+      "name": "Crear Notificacion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 240]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://ygqfbbkjdiryilwjrpzh.supabase.co/rest/v1/price_alerts?id=eq.{{ $('Evaluar Condicion').first().json.alert.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlncWZiYmtqZGlyeWlsd2pycHpoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1NDQ5NSwiZXhwIjoyMTAwMjMwNDk1fQ.6sfmLwuOJDfGzJjglHP8X_SQzdeUOd657CdEr_DVcTk" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"last_notified_at\": \"{{ new Date().toISOString() }}\" }",
+        "options": {}
+      },
+      "id": "wf3-0010",
+      "name": "Update Alerta Timestamp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 240]
+    }
+  ],
+  "connections": {
+    "Schedule 6hs": { "main": [[{ "node": "Leer Alertas Activas", "type": "main", "index": 0 }]] },
+    "Leer Alertas Activas": { "main": [[{ "node": "Split Alertas", "type": "main", "index": 0 }]] },
+    "Split Alertas": { "main": [[{ "node": "Loop por Alerta", "type": "main", "index": 0 }]] },
+    "Loop por Alerta": { "main": [[{ "node": "Preparar Query Precio", "type": "main", "index": 0 }]] },
+    "Preparar Query Precio": { "main": [[{ "node": "Fetch Precios Actuales", "type": "main", "index": 0 }]] },
+    "Fetch Precios Actuales": { "main": [[{ "node": "Evaluar Condicion", "type": "main", "index": 0 }]] },
+    "Evaluar Condicion": { "main": [[{ "node": "Debe Notificar?", "type": "main", "index": 0 }]] },
+    "Debe Notificar?": {
+      "main": [
+        [{ "node": "Crear Notificacion", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Crear Notificacion": { "main": [[{ "node": "Update Alerta Timestamp", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "tags": ["precios-ar", "alertas"]
+}
