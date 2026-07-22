@@ -2,13 +2,19 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Tag, Search, Bell, Settings } from "lucide-react";
+import { Tag, Search, Bell, Settings, ShoppingCart } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  useLocationPicker,
+  LocationDialog,
+  LocationBadge,
+} from "@/components/shared/LocationPicker";
 
 export default function Header({ lastScraping }: { lastScraping?: string | null }) {
   const pathname = usePathname();
   const isHome = pathname === "/";
+  const loc = useLocationPicker();
 
   return (
     <header className="sticky top-0 z-50 border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
@@ -43,6 +49,9 @@ export default function Header({ lastScraping }: { lastScraping?: string | null 
 
         {/* Right nav */}
         <div className="flex items-center gap-3 ml-auto">
+          {/* Location */}
+          <LocationBadge province={loc.savedProvince} onChange={loc.change} />
+
           {lastScraping && (
             <Badge
               variant="secondary"
@@ -52,6 +61,14 @@ export default function Header({ lastScraping }: { lastScraping?: string | null 
               Actualizado
             </Badge>
           )}
+
+          <Link
+            href="/lista"
+            className="flex items-center gap-1 text-sm text-gray-500 hover:text-blue-600 transition-colors"
+          >
+            <ShoppingCart className="h-4 w-4" />
+            <span className="hidden sm:inline">Lista</span>
+          </Link>
 
           <Link
             href="/alertas"
@@ -70,6 +87,17 @@ export default function Header({ lastScraping }: { lastScraping?: string | null 
           </Link>
         </div>
       </div>
+
+      {/* Location selection dialog */}
+      <LocationDialog
+        open={loc.open}
+        province={loc.province}
+        city={loc.city}
+        setProvince={loc.setProvince}
+        setCity={loc.setCity}
+        save={loc.save}
+        setOpen={loc.setOpen}
+      />
     </header>
   );
 }

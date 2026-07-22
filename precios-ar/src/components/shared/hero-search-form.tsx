@@ -13,33 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-
-const PROVINCES = [
-  "CABA",
-  "Buenos Aires",
-  "Catamarca",
-  "Chaco",
-  "Chubut",
-  "Córdoba",
-  "Corrientes",
-  "Entre Ríos",
-  "Formosa",
-  "Jujuy",
-  "La Pampa",
-  "La Rioja",
-  "Mendoza",
-  "Misiones",
-  "Neuquén",
-  "Río Negro",
-  "Salta",
-  "San Juan",
-  "San Luis",
-  "Santa Cruz",
-  "Santa Fe",
-  "Santiago del Estero",
-  "Tierra del Fuego",
-  "Tucumán",
-];
+import { PROVINCES } from "@/lib/location";
 
 const CATEGORIES = [
   { label: "Supermercados", slug: "supermercado" },

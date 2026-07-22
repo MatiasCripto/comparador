@@ -21,33 +21,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-
-const PROVINCES = [
-  "CABA",
-  "Buenos Aires",
-  "Catamarca",
-  "Chaco",
-  "Chubut",
-  "Córdoba",
-  "Corrientes",
-  "Entre Ríos",
-  "Formosa",
-  "Jujuy",
-  "La Pampa",
-  "La Rioja",
-  "Mendoza",
-  "Misiones",
-  "Neuquén",
-  "Río Negro",
-  "Salta",
-  "San Juan",
-  "San Luis",
-  "Santa Cruz",
-  "Santa Fe",
-  "Santiago del Estero",
-  "Tierra del Fuego",
-  "Tucumán",
-];
+import { PROVINCES } from "@/lib/location";
 
 const CATEGORIES = [
   "Supermercado",

@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Store as StoreType, ScrapingLog } from "@/types/database";
+import { PROVINCES } from "@/lib/location";
 
 type StoreWithCount = StoreType & { product_count: number };
 
@@ -55,33 +56,6 @@ const CATEGORIES = [
   "Electrodoméstico",
   "Farmacia",
   "Otro",
-];
-
-const PROVINCES = [
-  "CABA",
-  "Buenos Aires",
-  "Catamarca",
-  "Chaco",
-  "Chubut",
-  "Córdoba",
-  "Corrientes",
-  "Entre Ríos",
-  "Formosa",
-  "Jujuy",
-  "La Pampa",
-  "La Rioja",
-  "Mendoza",
-  "Misiones",
-  "Neuquén",
-  "Río Negro",
-  "Salta",
-  "San Juan",
-  "San Luis",
-  "Santa Cruz",
-  "Santa Fe",
-  "Santiago del Estero",
-  "Tierra del Fuego",
-  "Tucumán",
 ];
 
 function formatDate(dateStr: string | null): string {

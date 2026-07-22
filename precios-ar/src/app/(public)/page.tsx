@@ -1,4 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
+"use client";
+
+import { useState, useEffect } from "react";
 import Header from "@/components/shared/Header";
 import {
   Card,
@@ -9,43 +11,10 @@ import {
 } from "@/components/ui/card";
 import HeroSearchForm from "@/components/shared/hero-search-form";
 
-async function getStoreCount() {
-  try {
-    const supabase = await createClient();
-    const { count } = await supabase
-      .from("stores")
-      .select("*", { count: "exact", head: true });
-    return count ?? 0;
-  } catch {
-    return null;
-  }
-}
-
-async function getProductCount() {
-  try {
-    const supabase = await createClient();
-    const { count } = await supabase
-      .from("products")
-      .select("*", { count: "exact", head: true });
-    return count ?? 0;
-  } catch {
-    return null;
-  }
-}
-
-async function getLastScraping() {
-  try {
-    const supabase = await createClient();
-    const { data } = await supabase
-      .from("scraping_logs")
-      .select("scraped_at")
-      .order("scraped_at", { ascending: false })
-      .limit(1)
-      .single();
-    return data?.scraped_at ?? null;
-  } catch {
-    return null;
-  }
+interface Stats {
+  stores: number;
+  products: number;
+  lastUpdate: string | null;
 }
 
 function timeAgo(dateStr: string | null): string {
@@ -59,16 +28,26 @@ function timeAgo(dateStr: string | null): string {
   return `hace ${hours} horas`;
 }
 
-export default async function HomePage() {
-  const [storeCount, productCount, lastScraping] = await Promise.all([
-    getStoreCount(),
-    getProductCount(),
-    getLastScraping(),
-  ]);
+export default function HomePage() {
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/stats")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) {
+          setError(data.error);
+        } else {
+          setStats(data);
+        }
+      })
+      .catch((e) => setError(e.message));
+  }, []);
 
   return (
     <>
-      <Header lastScraping={lastScraping} />
+      <Header lastScraping={stats?.lastUpdate ?? null} />
 
       <main className="flex-1">
         {/* Hero */}
@@ -97,16 +76,18 @@ export default async function HomePage() {
                   Última actualización
                 </CardTitle>
                 <CardDescription className="text-center">
-                  {lastScraping
-                    ? timeAgo(lastScraping)
-                    : "No hay datos disponibles"}
+                  {stats?.lastUpdate
+                    ? timeAgo(stats.lastUpdate)
+                    : error
+                      ? `Error: ${error}`
+                      : "Cargando..."}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-4 text-center">
                   <div className="space-y-1">
                     <p className="text-3xl font-bold text-blue-600">
-                      {storeCount !== null ? storeCount : "—"}
+                      {stats !== null ? stats.stores : error ? "—" : "..."}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       Tiendas activas
@@ -114,7 +95,7 @@ export default async function HomePage() {
                   </div>
                   <div className="space-y-1">
                     <p className="text-3xl font-bold text-green-600">
-                      {productCount !== null ? productCount : "—"}
+                      {stats !== null ? stats.products : error ? "—" : "..."}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       Productos indexados

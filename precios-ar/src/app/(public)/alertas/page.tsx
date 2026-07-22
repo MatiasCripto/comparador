@@ -272,6 +272,9 @@ export default function AlertasPage() {
             <a href="/buscar" className="hover:text-gray-900">
               Buscar
             </a>
+            <a href="/lista" className="hover:text-gray-900">
+              Lista
+            </a>
             <a href="/alertas" className="hover:text-gray-900">
               Mis alertas
             </a>

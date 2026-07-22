@@ -9,7 +9,11 @@ export interface Store {
   city: string | null
   logo_url: string | null
   scraping_enabled: boolean
-  scraping_config: Record<string, unknown> | null
+  scraping_config: {
+    delivery_type?: 'national' | 'local' | 'both'
+    has_physical?: boolean
+    [key: string]: unknown
+  } | null
   last_scraped_at: string | null
   created_at: string
 }
@@ -80,17 +84,19 @@ export interface LatestPrice {
   product_id: string
   store_id: string
   store_name: string
-  store_category: string | null
+  category: string | null
   province: string | null
   city: string | null
-  logo_url: string | null
   canonical_name: string
+  raw_name: string | null
   brand: string | null
   unit: string | null
   quantity: number | null
   product_url: string | null
   image_url: string | null
   price: number
+  price_original: number
+  is_offer: boolean
   scraped_at: string
 }
 

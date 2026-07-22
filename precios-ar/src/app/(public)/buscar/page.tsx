@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import SearchFilters from "@/components/shared/search-filters";
 import SearchResults from "@/components/shared/search-results";
 import type { LatestPrice } from "@/types/database";
+import { getUserLocation } from "@/lib/location-server";
 
 interface SearchParams {
   q?: string;
@@ -17,10 +18,30 @@ interface SearchParams {
   precio_max?: string;
 }
 
+async function getMatchingStoreIds(supabase: ReturnType<typeof createAdminClient>, userProvince: string | null): Promise<string[] | null> {
+  // If no user location, return null = no filter (show all)
+  if (!userProvince) return null;
+
+  const { data: stores } = await supabase
+    .from("stores")
+    .select("id, scraping_config")
+    .or(
+      `scraping_config->>delivery_type.eq.national,province.eq.${userProvince}`
+    );
+
+  if (!stores || stores.length === 0) return [];
+  return stores.map((s: { id: string }) => s.id);
+}
+
 async function searchProducts(params: SearchParams): Promise<LatestPrice[]> {
   try {
     const supabase = createAdminClient();
     const { q, provincia, categoria, orden, precio_min, precio_max } = params;
+
+    // Apply location filter from cookie
+    const userLocation = await getUserLocation();
+    const effectiveProvincia = provincia || userLocation.province;
+    const storeIds = effectiveProvincia ? await getMatchingStoreIds(supabase, effectiveProvincia) : null;
 
     let query = supabase.from("latest_prices").select("*");
 
@@ -28,12 +49,16 @@ async function searchProducts(params: SearchParams): Promise<LatestPrice[]> {
       query = query.ilike("canonical_name", `%${q}%`);
     }
 
-    if (provincia) {
-      query = query.eq("province", provincia);
+    if (storeIds !== null) {
+      query = query.in("store_id", storeIds);
+    }
+
+    if (effectiveProvincia) {
+      query = query.eq("province", effectiveProvincia);
     }
 
     if (categoria) {
-      query = query.eq("store_category", categoria);
+      query = query.eq("category", categoria);
     }
 
     if (precio_min) {
@@ -131,6 +156,9 @@ export default async function BuscarPage({
             </a>
             <a href="/buscar" className="hover:text-gray-900">
               Buscar
+            </a>
+            <a href="/lista" className="hover:text-gray-900">
+              Lista
             </a>
             <a href="/alertas" className="hover:text-gray-900">
               Mis alertas

@@ -29,7 +29,7 @@ export function formatRelativeTime(dateStr: string): string {
   return `hace ${days} días`;
 }
 
-export function buildSearchUrl(
+export function formatSearchUrl(
   q: string,
   filters?: Record<string, string | undefined>
 ): string {
@@ -42,4 +42,49 @@ export function buildSearchUrl(
   }
   const qs = params.toString();
   return `/buscar${qs ? `?${qs}` : ""}`;
+}
+
+/**
+ * Parsea un precio desde cualquier formato (ARG, US, inglés, entero).
+ * Retorna el valor float correcto (ej: "28.267,64" → 28267.64).
+ */
+export function parsePrice(value: string | number | null | undefined): number {
+  if (value == null) return 0;
+  if (typeof value === "number") return isNaN(value) ? 0 : value;
+
+  let str = String(value).trim().replace(/[^0-9,.\-]/g, "");
+  if (!str) return 0;
+
+  const dots = (str.match(/\./g) || []).length;
+  const commas = (str.match(/,/g) || []).length;
+
+  if (dots === 0 && commas === 0) {
+    return parseFloat(str);
+  }
+
+  if (commas >= 1 && dots === 0) {
+    str = str.replace(",", ".");
+    str = str.replace(/\.(?=.*\.)/g, "");
+  } else if (dots >= 1 && commas === 0) {
+    const lastDot = str.lastIndexOf(".");
+    const afterDot = str.slice(lastDot + 1);
+    if (afterDot.length === 2 && /^\d+$/.test(afterDot)) {
+      if (dots > 1) {
+        str = str.slice(0, lastDot).replace(/\./g, "") + "." + afterDot;
+      }
+    } else {
+      str = str.replace(/\./g, "");
+    }
+  } else {
+    const lastDot = str.lastIndexOf(".");
+    const lastComma = str.lastIndexOf(",");
+    if (lastComma > lastDot) {
+      str = str.replace(/\./g, "").replace(",", ".");
+    } else {
+      str = str.replace(/,/g, "");
+    }
+  }
+
+  const result = parseFloat(str);
+  return isNaN(result) ? 0 : result;
 }

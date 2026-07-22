@@ -20,33 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-const PROVINCES = [
-  "CABA",
-  "Buenos Aires",
-  "Catamarca",
-  "Chaco",
-  "Chubut",
-  "Córdoba",
-  "Corrientes",
-  "Entre Ríos",
-  "Formosa",
-  "Jujuy",
-  "La Pampa",
-  "La Rioja",
-  "Mendoza",
-  "Misiones",
-  "Neuquén",
-  "Río Negro",
-  "Salta",
-  "San Juan",
-  "San Luis",
-  "Santa Cruz",
-  "Santa Fe",
-  "Santiago del Estero",
-  "Tierra del Fuego",
-  "Tucumán",
-];
+import { PROVINCES } from "@/lib/location";
 
 type Status = "idle" | "loading" | "success" | "error";
 
