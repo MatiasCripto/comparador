@@ -5,7 +5,7 @@ export async function GET() {
   try {
     const supabase = createAdminClient();
     const { data } = await supabase
-      .from("stores")
+      .from("products")
       .select("category")
       .not("category", "is", null);
 
