@@ -14,7 +14,7 @@ import { createAdminClient } from "@/lib/supabase/service";
 import { autoDetectCategory } from "@/lib/product-categories";
 import { normalizeQuery, normalize } from "./normalize";
 import { extractAttributes } from "./attributes";
-import type { LatestPrice } from "@/types/database";
+import type { LatestPrice, AutocompleteSuggestion } from "@/types/database";
 
 // ---------------------------------------------------------------------------
 // Tipos públicos
@@ -291,18 +291,16 @@ export async function searchProducts(
 export async function searchSuggestions(
   query: string,
   storeCategory?: string
-): Promise<
-  { canonical_name: string; price: number; store_name: string; store_id: string; product_url: string | null }[]
-> {
+): Promise<AutocompleteSuggestion[]> {
   const supabase = createAdminClient();
   const nq = normalizeQuery(query);
 
   let dbQuery = supabase
     .from("latest_prices")
-    .select("canonical_name, price, store_name, store_id, product_url, category, brand")
+    .select("product_id, canonical_name, raw_name, brand, category, unit, quantity, price, price_original, is_offer, store_name, store_id, product_url, image_url")
     .ilike("canonical_name", `%${nq}%`)
     .order("price", { ascending: true })
-    .limit(30);
+    .limit(40);
 
   if (storeCategory) {
     dbQuery = dbQuery.eq("category", storeCategory);
@@ -312,9 +310,11 @@ export async function searchSuggestions(
   if (!data || data.length === 0) return [];
 
   // Puntuar y deduplicar por canonical_name (mejor score)
-  const seen = new Map<string, { score: number; item: any }>();
-  for (const item of data) {
+  const seen = new Map<string, { score: number; item: AutocompleteSuggestion }>();
+  for (const item of data as AutocompleteSuggestion[]) {
     const r = computeRelevance(query, item.canonical_name, item.brand, item.category);
+    // Threshold más estricto para autocomplete: score >= 25
+    if (r.score < 25) continue;
     const existing = seen.get(item.canonical_name);
     if (!existing || r.score > existing.score) {
       seen.set(item.canonical_name, { score: r.score, item });
@@ -327,13 +327,7 @@ export async function searchSuggestions(
       return a.item.price - b.item.price;
     })
     .slice(0, 10)
-    .map((s) => ({
-      canonical_name: s.item.canonical_name,
-      price: s.item.price,
-      store_name: s.item.store_name,
-      store_id: s.item.store_id,
-      product_url: s.item.product_url,
-    }));
+    .map((s) => s.item);
 }
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import CategorySelector from "./CategorySelector";
 import ProductSearchInput from "./ProductSearchInput";
 import ProductList from "./ProductList";
 import StrategyResults from "./StrategyResults";
+import type { SelectedProduct } from "@/types/search";
 
 type Step = "category" | "products" | "results";
 
@@ -38,20 +39,19 @@ export default function ListaClient({
 }) {
   const [step, setStep] = useState<Step>(initialCategories.length > 0 ? "category" : "products");
   const [selectedCategory, setSelectedCategory] = useState("");
-  const [items, setItems] = useState<string[]>([]);
+  const [items, setItems] = useState<SelectedProduct[]>([]);
   const [loading, setLoading] = useState(false);
   const [comparing, setComparing] = useState(false);
   const [result, setResult] = useState<ListaResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const addItem = useCallback((name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    setItems(prev => prev.includes(trimmed) ? prev : [...prev, trimmed]);
+  const addItem = useCallback((product: SelectedProduct) => {
+    const key = product.product_id || product.canonical_name;
+    setItems(prev => prev.some(p => (p.product_id || p.canonical_name) === key) ? prev : [...prev, product]);
   }, []);
 
-  const removeItem = useCallback((term: string) => {
-    setItems(prev => prev.filter(t => t !== term));
+  const removeItem = useCallback((canonicalName: string) => {
+    setItems(prev => prev.filter(p => p.canonical_name !== canonicalName));
   }, []);
 
   const handleCategoryChange = useCallback((cat: string) => {
@@ -69,13 +69,25 @@ export default function ListaClient({
     setResult(null);
 
     try {
+      const payload: Record<string, unknown> = {
+        items: items.map(i => ({
+          product_id: i.product_id,
+          canonical_name: i.canonical_name,
+          raw_name: i.raw_name,
+          brand: i.brand,
+          category: i.category,
+          subcategory: i.subcategory,
+          unit: i.unit,
+          quantity: i.quantity,
+          isFallback: i.isFallback,
+        })),
+      };
+      if (selectedCategory) payload.store_category = selectedCategory;
+
       const res = await fetch("/api/lista", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items,
-          ...(selectedCategory ? { store_category: selectedCategory } : {}),
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();

@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/service";
 import { computeRelevance } from "@/lib/search/search-engine";
 import { normalizeQuery } from "@/lib/search/normalize";
 import type { LatestPrice } from "@/types/database";
+import type { SelectedProduct } from "@/types/search";
 
 interface ItemMatch {
   term: string;
@@ -120,6 +121,28 @@ async function getMatchingStoreIds(supabase: ReturnType<typeof createAdminClient
 
   if (!stores || stores.length === 0) return [];
   return stores.map((s: { id: string }) => s.id);
+}
+
+/**
+ * Búsqueda exacta por product_id: retorna todos los precios del producto.
+ */
+async function searchProductById(productId: string, storeIds: string[] | null, storeCategory?: string): Promise<LatestPrice[]> {
+  const supabase = createAdminClient();
+  let query = supabase
+    .from("latest_prices")
+    .select("*")
+    .eq("product_id", productId);
+
+  if (storeIds !== null) {
+    query = query.in("store_id", storeIds);
+  }
+
+  if (storeCategory) {
+    query = query.eq("category", storeCategory);
+  }
+
+  const { data } = await query;
+  return (data as LatestPrice[]) ?? [];
 }
 
 function calcStrategy1(
@@ -344,26 +367,45 @@ function calcStrategy3(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { items, store_category } = body as { items: string[]; store_category?: string };
+    const { store_category } = body;
+    const rawItems: unknown[] = body.items;
 
-    if (!Array.isArray(items) || items.length === 0) {
+    if (!Array.isArray(rawItems) || rawItems.length === 0) {
       return NextResponse.json({ error: "Lista de productos requerida" }, { status: 400 });
     }
 
-    if (items.length > 50) {
+    if (rawItems.length > 50) {
       return NextResponse.json({ error: "Máximo 50 productos por lista" }, { status: 400 });
     }
+
+    // Normalize items: support both SelectedProduct objects and plain strings
+    type ItemEntry = { term: string; selectedProduct: SelectedProduct | null };
+    const entries: ItemEntry[] = rawItems.map((item) => {
+      if (typeof item === "string") {
+        return { term: item, selectedProduct: null };
+      }
+      const sp = item as Record<string, unknown>;
+      const hasProductId = typeof sp.product_id === "string" && sp.product_id.length > 0;
+      return {
+        term: typeof sp.canonical_name === "string" ? sp.canonical_name : String(item),
+        selectedProduct: hasProductId ? (item as SelectedProduct) : null,
+      };
+    });
 
     // Read user location from cookie
     const userProvince = request.cookies.get("user_province")?.value ?? null;
     const supabase = createAdminClient();
     const storeIds = await getMatchingStoreIds(supabase, userProvince);
 
-    // Search each product with relevance-based selection
+    // Search each product
     const results = await Promise.all(
-      items.map(async (term) => {
-        const matches = await searchProduct(term, storeIds, store_category);
-        return { term, matches };
+      entries.map(async (entry) => {
+        if (entry.selectedProduct) {
+          const matches = await searchProductById(entry.selectedProduct.product_id, storeIds, store_category);
+          return { term: entry.term, matches };
+        }
+        const matches = await searchProduct(entry.term, storeIds, store_category);
+        return { term: entry.term, matches };
       })
     );
 

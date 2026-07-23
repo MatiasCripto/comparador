@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Search, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,22 +15,25 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { PROVINCES } from "@/lib/location";
 
-const CATEGORIES = [
-  { label: "Supermercados", slug: "supermercado" },
-  { label: "Pinturerías", slug: "pintureria" },
-  { label: "Corralones", slug: "corralon" },
-  { label: "Cerámicas", slug: "ceramica" },
-  { label: "Ferreterías", slug: "ferreteria" },
-  { label: "Electrodomésticos", slug: "electrodomesticos" },
-  { label: "Farmacias", slug: "farmacia" },
-  { label: "Indumentaria", slug: "indumentaria" },
-  { label: "Otros", slug: "otros" },
-];
-
 export default function HeroSearchForm() {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [province, setProvince] = useState("");
+  const [categories, setCategories] = useState<{ label: string; slug: string }[]>([]);
+
+  useEffect(() => {
+    fetch("/api/store-categories")
+      .then(r => r.json())
+      .then(d => {
+        if (Array.isArray(d.categories)) {
+          setCategories(d.categories.map((cat: string) => ({
+            label: cat.charAt(0).toUpperCase() + cat.slice(1),
+            slug: cat.toLowerCase(),
+          })));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -98,18 +101,20 @@ export default function HeroSearchForm() {
         </div>
       </form>
 
-      <div className="flex flex-wrap justify-center gap-2">
-        {CATEGORIES.map((cat) => (
-          <Badge
-            key={cat.slug}
-            variant="secondary"
-            className="cursor-pointer px-4 py-1.5 text-sm hover:bg-blue-100 hover:text-blue-700 transition-colors"
-            onClick={() => handleCategoryClick(cat.slug)}
-          >
-            {cat.label}
-          </Badge>
-        ))}
-      </div>
+      {categories.length > 0 && (
+        <div className="flex flex-wrap justify-center gap-2">
+          {categories.map((cat) => (
+            <Badge
+              key={cat.slug}
+              variant="secondary"
+              className="cursor-pointer px-4 py-1.5 text-sm hover:bg-blue-100 hover:text-blue-700 transition-colors"
+              onClick={() => handleCategoryClick(cat.slug)}
+            >
+              {cat.label}
+            </Badge>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

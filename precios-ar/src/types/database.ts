@@ -105,9 +105,19 @@ export interface LatestPrice {
 export type ScrapingStatus = 'success' | 'error' | 'running' | 'pending'
 
 export interface AutocompleteSuggestion {
+  product_id: string;
   canonical_name: string;
+  raw_name: string | null;
+  brand: string | null;
+  category: string | null;
+  subcategory: string | null;
+  unit: string | null;
+  quantity: number | null;
   price: number;
+  price_original: number;
+  is_offer: boolean;
   store_name: string;
   store_id: string;
   product_url: string | null;
+  image_url: string | null;
 }
