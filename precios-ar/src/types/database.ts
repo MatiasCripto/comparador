@@ -103,3 +103,11 @@ export interface LatestPrice {
 // === ENUMS ===
 
 export type ScrapingStatus = 'success' | 'error' | 'running' | 'pending'
+
+export interface AutocompleteSuggestion {
+  canonical_name: string;
+  price: number;
+  store_name: string;
+  store_id: string;
+  product_url: string | null;
+}

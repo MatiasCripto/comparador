@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Tag, Search, Bell, Settings, ShoppingCart } from "lucide-react";
+import { Tag, Search, Bell, Settings, ShoppingCart, Store } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -68,6 +68,14 @@ export default function Header({ lastScraping }: { lastScraping?: string | null 
           >
             <ShoppingCart className="h-4 w-4" />
             <span className="hidden sm:inline">Lista</span>
+          </Link>
+
+          <Link
+            href="/tiendas"
+            className="flex items-center gap-1 text-sm text-gray-500 hover:text-blue-600 transition-colors"
+          >
+            <Store className="h-4 w-4" />
+            <span className="hidden sm:inline">Tiendas</span>
           </Link>
 
           <Link

@@ -45,7 +45,7 @@ interface ListaResponse {
   strategies: StrategyResult[];
 }
 
-async function searchProduct(term: string, storeIds: string[] | null): Promise<LatestPrice[]> {
+async function searchProduct(term: string, storeIds: string[] | null, storeCategory?: string): Promise<LatestPrice[]> {
   const supabase = createAdminClient();
   let query = supabase
     .from("latest_prices")
@@ -54,6 +54,10 @@ async function searchProduct(term: string, storeIds: string[] | null): Promise<L
 
   if (storeIds !== null) {
     query = query.in("store_id", storeIds);
+  }
+
+  if (storeCategory) {
+    query = query.eq("category", storeCategory);
   }
 
   const { data } = await query
@@ -299,7 +303,7 @@ function calcStrategy3(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { items } = body as { items: string[] };
+    const { items, store_category } = body as { items: string[]; store_category?: string };
 
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "Lista de productos requerida" }, { status: 400 });
@@ -317,7 +321,7 @@ export async function POST(request: NextRequest) {
     // Search each product
     const results = await Promise.all(
       items.map(async (term) => {
-        const matches = await searchProduct(term, storeIds);
+        const matches = await searchProduct(term, storeIds, store_category);
         return { term, matches };
       })
     );

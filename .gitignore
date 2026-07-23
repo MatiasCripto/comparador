@@ -6,3 +6,18 @@ out/
 next-env.d.ts
 explore.js
 test-connections.js
+
+# Build/deploy artifacts
+precios-ar-deploy.tar.gz
+_precios-ar.tar.gz
+
+# Temporary test files
+_code_output.js
+_scraper_test.js
+_scraper_test2.js
+_sepa_test.mjs
+_deploy/
+_deploy.tar.gz
+
+# Data export files (may contain secrets)
+w*.json

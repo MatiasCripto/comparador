@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Filter, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,18 +23,6 @@ import {
 } from "@/components/ui/sheet";
 import { PROVINCES } from "@/lib/location";
 
-const CATEGORIES = [
-  "Supermercado",
-  "Pinturería",
-  "Corralón",
-  "Cerámica",
-  "Ferretería",
-  "Electrodomésticos",
-  "Farmacia",
-  "Indumentaria",
-  "Otros",
-];
-
 export default function SearchFilters({
   currentQuery,
   currentProvince,
@@ -52,6 +40,16 @@ export default function SearchFilters({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [storeCategories, setStoreCategories] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/store-categories")
+      .then(r => r.json())
+      .then(d => {
+        if (Array.isArray(d.categories)) setStoreCategories(d.categories);
+      })
+      .catch(() => {});
+  }, []);
 
   const buildUrl = useCallback(
     (updates: Record<string, string | null | undefined>) => {
@@ -112,7 +110,7 @@ export default function SearchFilters({
       <div className="space-y-2">
         <Label className="text-sm font-medium">Categoría de tienda</Label>
         <div className="space-y-1">
-          {CATEGORIES.map((cat) => (
+          {storeCategories.length > 0 && storeCategories.map((cat) => (
             <label
               key={cat}
               className="flex items-center gap-2 py-1.5 cursor-pointer text-sm hover:text-blue-600 transition-colors"
