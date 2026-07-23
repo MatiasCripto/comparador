@@ -318,7 +318,7 @@ async function processBrand(brandName, sepaId, sepaBrandId, comercioUrl, product
       canonical_name: (p.marca ? `${p.name} ${p.marca}` : p.name).trim().slice(0, 255),
       raw_name: p.name.slice(0, 255),
       store_id: storeId,
-      product_url: p.ean.slice(0, 500),
+      product_url: '', // SEPA no provee URLs individuales de producto
       image_url: '',
       category: autoDetectCategory(p.name, null, p.marca) || 'supermercados',
     };
