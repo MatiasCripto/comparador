@@ -5,6 +5,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Ensures a URL has https:// prefix for external links
+ */
+export function externalUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  return url.startsWith("http://") || url.startsWith("https://") ? url : `https://${url}`;
+}
+
 export function formatPrice(price: number): string {
   return new Intl.NumberFormat("es-AR", {
     style: "currency",

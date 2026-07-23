@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Package, ExternalLink, Tag, Store } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/service";
 import { slugify } from "@/lib/slug";
-import { formatPrice } from "@/lib/utils";
+import { formatPrice, externalUrl } from "@/lib/utils";
 import type { LatestPrice } from "@/types/database";
 
 const ITEMS_PER_PAGE = 50;
@@ -96,7 +96,7 @@ export default async function StorePage({
 
             {store.url && (
               <a
-                href={store.url}
+                href={externalUrl(store.url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-blue-300 hover:text-blue-600 transition-all shrink-0"
@@ -147,7 +147,7 @@ export default async function StorePage({
                     </span>
                     {product.product_url && (
                       <a
-                        href={product.product_url}
+                      href={externalUrl(product.product_url)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-gray-400 hover:text-blue-600 transition-colors"

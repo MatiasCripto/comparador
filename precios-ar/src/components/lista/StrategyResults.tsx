@@ -5,7 +5,7 @@ import { Store, ExternalLink, ChevronDown, ChevronUp, SearchX, Sparkles, Shoppin
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { formatPrice } from "@/lib/utils";
+import { formatPrice, externalUrl } from "@/lib/utils";
 
 interface StoreItem {
   name: string;
@@ -157,7 +157,7 @@ export default function StrategyResults({
                             <span className="text-sm font-medium text-gray-900">{formatPrice(item.price)}</span>
                             {item.product_url && (
                               <a
-                                href={item.product_url}
+                                href={externalUrl(item.product_url)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-gray-400 hover:text-blue-600 transition-colors"

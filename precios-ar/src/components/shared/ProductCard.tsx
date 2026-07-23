@@ -1,8 +1,11 @@
 import { Store, MapPin, ExternalLink, Clock, Bell } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 import AlertModal from "./AlertModal";
+import { externalUrl } from "@/lib/utils";
+import { slugify } from "@/lib/slug";
 import type { LatestPrice } from "@/types/database";
 
 function formatPrice(price: number): string {
@@ -59,7 +62,12 @@ export default function ProductCard({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
             <span className="flex items-center gap-1">
               <Store className="h-3 w-3" />
-              {product.store_name}
+              <Link
+                href={`/tiendas/${slugify(product.store_name)}`}
+                className="hover:text-blue-600 transition-colors"
+              >
+                {product.store_name}
+              </Link>
             </span>
             {(product.province || product.city) && (
               <span className="flex items-center gap-1">
@@ -85,7 +93,7 @@ export default function ProductCard({
       <div className="flex items-center gap-2 mt-3 pt-3 border-t">
         {product.product_url && (
           <a
-            href={product.product_url}
+            href={externalUrl(product.product_url)}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-1 rounded-md border border-input bg-background px-3 text-xs h-8 hover:bg-accent hover:text-accent-foreground transition-colors"
