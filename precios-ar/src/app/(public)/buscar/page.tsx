@@ -8,6 +8,7 @@ import SearchFilters from "@/components/shared/search-filters";
 import SearchResults from "@/components/shared/search-results";
 import type { LatestPrice } from "@/types/database";
 import { getUserLocation } from "@/lib/location-server";
+import { searchProducts } from "@/lib/search/search-engine";
 
 interface SearchParams {
   q?: string;
@@ -33,58 +34,43 @@ async function getMatchingStoreIds(supabase: ReturnType<typeof createAdminClient
   return stores.map((s: { id: string }) => s.id);
 }
 
-async function searchProducts(params: SearchParams): Promise<LatestPrice[]> {
+async function searchProductsWithRelevance(params: SearchParams): Promise<LatestPrice[]> {
   try {
-    const supabase = createAdminClient();
     const { q, provincia, categoria, orden, precio_min, precio_max } = params;
+
+    if (!q) return [];
 
     // Apply location filter from cookie
     const userLocation = await getUserLocation();
     const effectiveProvincia = provincia || userLocation.province;
+    const supabase = createAdminClient();
     const storeIds = effectiveProvincia ? await getMatchingStoreIds(supabase, effectiveProvincia) : null;
 
-    let query = supabase.from("latest_prices").select("*");
+    const result = await searchProducts(q, {
+      storeIds,
+      province: effectiveProvincia || undefined,
+      category: categoria,
+      minPrice: precio_min ? parseFloat(precio_min) : undefined,
+      maxPrice: precio_max ? parseFloat(precio_max) : undefined,
+    });
 
-    if (q) {
-      query = query.ilike("canonical_name", `%${q}%`);
-    }
-
-    if (storeIds !== null) {
-      query = query.in("store_id", storeIds);
-    }
-
-    if (effectiveProvincia) {
-      query = query.eq("province", effectiveProvincia);
-    }
-
-    if (categoria) {
-      query = query.eq("category", categoria);
-    }
-
-    if (precio_min) {
-      query = query.gte("price", parseFloat(precio_min));
-    }
-
-    if (precio_max) {
-      query = query.lte("price", parseFloat(precio_max));
-    }
-
+    // Sort based on user preference (keep existing sort behavior)
+    const products = result.products;
     switch (orden) {
       case "price_desc":
-        query = query.order("price", { ascending: false });
+        products.sort((a, b) => b.price - a.price);
         break;
-      case "newest":
-        query = query.order("scraped_at", { ascending: false });
+      case "price_asc":
+        products.sort((a, b) => a.price - b.price);
         break;
       default:
-        query = query.order("price", { ascending: true });
+        // Already sorted by relevance desc, price asc
+        break;
     }
 
-    query = query.limit(200);
-
-    const { data } = await query;
-    return (data as LatestPrice[]) ?? [];
-  } catch {
+    return products.slice(0, 200);
+  } catch (e) {
+    console.error("[buscar] search error:", e);
     return [];
   }
 }
@@ -102,7 +88,7 @@ export default async function BuscarPage({
   const precio_min = params.precio_min;
   const precio_max = params.precio_max;
 
-  const results = q ? await searchProducts(params) : [];
+  const results = q ? await searchProductsWithRelevance(params) : [];
 
   return (
     <div className="min-h-screen flex flex-col">

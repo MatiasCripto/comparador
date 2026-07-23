@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/service";
+import { computeRelevance } from "@/lib/search/search-engine";
+import { normalizeQuery } from "@/lib/search/normalize";
 import type { LatestPrice } from "@/types/database";
 
 interface ItemMatch {
@@ -45,12 +47,23 @@ interface ListaResponse {
   strategies: StrategyResult[];
 }
 
+/**
+ * Búsqueda inteligente: encuentra el producto más relevante para el término.
+ *
+ * 1. Consulta amplia con ILIKE (100 rows)
+ * 2. Puntúa cada resultado por relevancia
+ * 3. Agrupa por canonical_name, elige el grupo con mejor score
+ * 4. Retorna los precios de ESE producto en todas las tiendas
+ */
 async function searchProduct(term: string, storeIds: string[] | null, storeCategory?: string): Promise<LatestPrice[]> {
   const supabase = createAdminClient();
+  const nq = normalizeQuery(term);
+
   let query = supabase
     .from("latest_prices")
     .select("*")
-    .ilike("canonical_name", `%${term}%`);
+    .ilike("canonical_name", `%${nq}%`)
+    .limit(100);
 
   if (storeIds !== null) {
     query = query.in("store_id", storeIds);
@@ -60,11 +73,39 @@ async function searchProduct(term: string, storeIds: string[] | null, storeCateg
     query = query.eq("category", storeCategory);
   }
 
-  const { data } = await query
-    .order("price", { ascending: true })
-    .limit(30);
+  const { data } = await query;
+  if (!data || data.length === 0) return [];
 
-  return (data as LatestPrice[]) ?? [];
+  // Score each result
+  const scored = (data as LatestPrice[]).map((p) => ({
+    ...p,
+    relevance: computeRelevance(term, p.canonical_name, p.brand, p.category),
+  }));
+
+  // Group by canonical_name, compute best score per group
+  const groups = new Map<string, { score: number; items: LatestPrice[] }>();
+  for (const p of scored) {
+    if (p.relevance.score < 15) continue; // Skip irrelevant
+    const g = groups.get(p.canonical_name);
+    if (g) {
+      g.items.push(p);
+      if (p.relevance.score > g.score) g.score = p.relevance.score;
+    } else {
+      groups.set(p.canonical_name, { score: p.relevance.score, items: [p] });
+    }
+  }
+
+  if (groups.size === 0) return [];
+
+  // Pick the group with the highest relevance score
+  let bestGroup: { score: number; items: LatestPrice[] } | null = null;
+  for (const [, g] of groups) {
+    if (!bestGroup || g.score > bestGroup.score) {
+      bestGroup = g;
+    }
+  }
+
+  return bestGroup?.items ?? [];
 }
 
 async function getMatchingStoreIds(supabase: ReturnType<typeof createAdminClient>, userProvince: string | null): Promise<string[] | null> {
@@ -318,7 +359,7 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient();
     const storeIds = await getMatchingStoreIds(supabase, userProvince);
 
-    // Search each product
+    // Search each product with relevance-based selection
     const results = await Promise.all(
       items.map(async (term) => {
         const matches = await searchProduct(term, storeIds, store_category);
@@ -326,7 +367,7 @@ export async function POST(request: NextRequest) {
       })
     );
 
-    // For each item, build store → price map (cheapest per store)
+    // For each item, build store → price map (cheapest per store for the selected product)
     const storeNames = new Map<string, string>();
     const pricedItems: { term: string; prices: Map<string, ItemMatch> }[] = [];
 
