@@ -297,12 +297,16 @@ export async function searchSuggestions(
 
   console.log("[searchSuggestions] query:", query, "nq:", nq, "storeCategory:", storeCategory || "(none)");
 
+  // Short queries (<4 chars) use prefix match (le%) to leverage trigram index
+  // Longer queries use substring match (%leche%) for broader results
+  const ilikePattern = nq.length < 4 ? `${nq}%` : `%${nq}%`;
+
   let dbQuery = supabase
     .from("latest_prices")
     .select("product_id, canonical_name, raw_name, brand, category, unit, quantity, price, price_original, is_offer, store_name, store_id, product_url, image_url")
-    .ilike("canonical_name", `%${nq}%`)
+    .ilike("canonical_name", ilikePattern)
     .order("price", { ascending: true })
-    .limit(40);
+    .limit(nq.length < 4 ? 20 : 40);
 
   if (storeCategory) {
     dbQuery = dbQuery.eq("category", storeCategory);
