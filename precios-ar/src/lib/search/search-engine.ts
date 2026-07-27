@@ -295,6 +295,8 @@ export async function searchSuggestions(
   const supabase = createAdminClient();
   const nq = normalizeQuery(query);
 
+  console.log("[searchSuggestions] query:", query, "nq:", nq, "storeCategory:", storeCategory || "(none)");
+
   let dbQuery = supabase
     .from("latest_prices")
     .select("product_id, canonical_name, raw_name, brand, category, unit, quantity, price, price_original, is_offer, store_name, store_id, product_url, image_url")
@@ -306,20 +308,27 @@ export async function searchSuggestions(
     dbQuery = dbQuery.eq("category", storeCategory);
   }
 
-  const { data } = await dbQuery;
+  const { data, error } = await dbQuery;
+
+  console.log("[searchSuggestions] DB error:", error);
+  console.log("[searchSuggestions] rows from DB:", data?.length ?? 0);
+
   if (!data || data.length === 0) return [];
 
   // Puntuar y deduplicar por canonical_name (mejor score)
   const seen = new Map<string, { score: number; item: AutocompleteSuggestion }>();
   for (const item of data as AutocompleteSuggestion[]) {
     const r = computeRelevance(query, item.canonical_name, item.brand, item.category);
-    // Threshold más estricto para autocomplete: score >= 25
-    if (r.score < 25) continue;
+    const threshold = query.trim().length < 4 ? 5 : 25;
+    console.log("[searchSuggestions] score:", r.score, "(", r.matchType, ")", "→", item.canonical_name, "| threshold:", threshold, r.score >= threshold ? "PASA" : "FILTRADO");
+    if (r.score < threshold) continue;
     const existing = seen.get(item.canonical_name);
     if (!existing || r.score > existing.score) {
       seen.set(item.canonical_name, { score: r.score, item });
     }
   }
+
+  console.log("[searchSuggestions] passed threshold + dedup:", seen.size, "unique products");
 
   return Array.from(seen.values())
     .sort((a, b) => {
