@@ -301,27 +301,40 @@ export async function searchSuggestions(
   // Longer queries use substring match (%leche%) for broader results
   const ilikePattern = nq.length < 4 ? `${nq}%` : `%${nq}%`;
 
-  let dbQuery = supabase
-    .from("latest_prices")
-    .select("product_id, canonical_name, raw_name, brand, category, unit, quantity, price, price_original, is_offer, store_name, store_id, product_url, image_url")
+  // Step 1: search products table directly (uses trigram index)
+  let productQuery = supabase
+    .from("products")
+    .select("id")
     .ilike("canonical_name", ilikePattern)
-    .order("price", { ascending: true })
     .limit(nq.length < 4 ? 20 : 40);
 
   if (storeCategory) {
-    dbQuery = dbQuery.eq("category", storeCategory);
+    productQuery = productQuery.eq("category", storeCategory);
   }
 
-  const { data, error } = await dbQuery;
+  const { data: matchedProducts, error: productError } = await productQuery;
+  console.log("[searchSuggestions] products query error:", productError);
+  console.log("[searchSuggestions] matched products:", matchedProducts?.length ?? 0);
 
-  console.log("[searchSuggestions] DB error:", error);
-  console.log("[searchSuggestions] rows from DB:", data?.length ?? 0);
+  if (!matchedProducts || matchedProducts.length === 0) return [];
 
-  if (!data || data.length === 0) return [];
+  // Step 2: get prices for matched products from latest_prices
+  const productIds = matchedProducts.map(p => p.id);
+
+  const { data: rows, error: priceError } = await supabase
+    .from("latest_prices")
+    .select("product_id, canonical_name, raw_name, brand, category, unit, quantity, price, price_original, is_offer, store_name, store_id, product_url, image_url")
+    .in("product_id", productIds)
+    .order("price", { ascending: true });
+
+  console.log("[searchSuggestions] prices query error:", priceError);
+  console.log("[searchSuggestions] rows from prices:", rows?.length ?? 0);
+
+  if (!rows || rows.length === 0) return [];
 
   // Puntuar y deduplicar por canonical_name (mejor score)
   const seen = new Map<string, { score: number; item: AutocompleteSuggestion }>();
-  for (const item of data as AutocompleteSuggestion[]) {
+  for (const item of rows as AutocompleteSuggestion[]) {
     const r = computeRelevance(query, item.canonical_name, item.brand, item.category);
     const threshold = query.trim().length < 4 ? 5 : 25;
     console.log("[searchSuggestions] score:", r.score, "(", r.matchType, ")", "→", item.canonical_name, "| threshold:", threshold, r.score >= threshold ? "PASA" : "FILTRADO");
