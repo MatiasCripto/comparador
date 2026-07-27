@@ -14,8 +14,6 @@ interface ProductAutocompleteProps {
   disabled?: boolean;
   /** IDs de productos ya agregados para excluir del dropdown */
   existingProductIds?: string[];
-  /** Callback para que el padre pueda leer el texto actual del input */
-  onInputChange?: (value: string) => void;
 }
 
 export default function ProductAutocomplete({
@@ -24,7 +22,6 @@ export default function ProductAutocomplete({
   placeholder = "Buscá un producto...",
   disabled = false,
   existingProductIds = [],
-  onInputChange,
 }: ProductAutocompleteProps) {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<AutocompleteSuggestion[]>([]);
@@ -109,37 +106,14 @@ export default function ProductAutocomplete({
       setQuery("");
       setSuggestions([]);
       setShowDropdown(false);
-      onInputChange?.("");
       inputRef.current?.focus();
     },
-    [onSelect, suggestionToProduct, onInputChange]
+    [onSelect, suggestionToProduct]
   );
-
-  const submitAsFallback = useCallback(() => {
-    const trimmed = query.trim();
-    if (!trimmed) return;
-    onSelect({
-      product_id: "",
-      canonical_name: trimmed,
-      raw_name: null,
-      brand: null,
-      category: null,
-      subcategory: null,
-      unit: null,
-      quantity: null,
-      isFallback: true,
-    });
-    setQuery("");
-    setSuggestions([]);
-    setShowDropdown(false);
-    onInputChange?.("");
-    inputRef.current?.focus();
-  }, [query, onSelect, onInputChange]);
 
   const handleQueryChange = useCallback((value: string) => {
     setQuery(value);
-    onInputChange?.(value);
-  }, [onInputChange]);
+  }, []);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -159,14 +133,12 @@ export default function ProductAutocomplete({
           selectSuggestion(suggestions[selectedIndex]);
         } else if (suggestions.length > 0) {
           selectSuggestion(suggestions[0]);
-        } else {
-          submitAsFallback();
         }
       } else if (e.key === "Escape") {
         setShowDropdown(false);
       }
     },
-    [suggestions, selectedIndex, selectSuggestion, submitAsFallback]
+    [suggestions, selectedIndex, selectSuggestion]
   );
 
   return (
