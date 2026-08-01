@@ -18,6 +18,8 @@ export default function BuscarClient({
   initialMinPrice,
   initialMaxPrice,
   initialResults,
+  initialProduct,
+  initialProductResults,
 }: {
   initialCategories: string[];
   initialQuery?: string;
@@ -27,12 +29,19 @@ export default function BuscarClient({
   initialMinPrice?: string;
   initialMaxPrice?: string;
   initialResults?: LatestPrice[];
+  /** Producto real seleccionado desde el autocomplete de la portada (pid) */
+  initialProduct?: SelectedProduct;
+  initialProductResults?: LatestPrice[];
 }) {
   const [selectedCategory, setSelectedCategory] = useState(initialCategory ?? "");
-  const [selectedProduct, setSelectedProduct] = useState<SelectedProduct | null>(null);
-  const [productResults, setProductResults] = useState<LatestPrice[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<SelectedProduct | null>(initialProduct ?? null);
+  const [productResults, setProductResults] = useState<LatestPrice[]>(initialProductResults ?? []);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    initialProduct && initialProductResults && initialProductResults.length === 0
+      ? `No se encontraron precios para "${initialProduct.canonical_name}"`
+      : null
+  );
 
   const handleProductSelect = useCallback(async (product: SelectedProduct) => {
     setSelectedProduct(product);

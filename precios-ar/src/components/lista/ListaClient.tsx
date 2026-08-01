@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { ShoppingCart, ArrowRight, Loader2, AlertCircle, Package } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
+import { ShoppingCart, ArrowRight, Loader2, AlertCircle, Package, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CategorySelector from "./CategorySelector";
 import ProductSearchInput from "./ProductSearchInput";
@@ -39,7 +39,17 @@ export default function ListaClient({
 }) {
   const [step, setStep] = useState<Step>(initialCategories.length > 0 ? "category" : "products");
   const [selectedCategory, setSelectedCategory] = useState("");
-  const [items, setItems] = useState<SelectedProduct[]>([]);
+  const [items, setItems] = useState<SelectedProduct[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem("lista_items");
+      if (!saved) return [];
+      const parsed = JSON.parse(saved) as SelectedProduct[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
   const [loading, setLoading] = useState(false);
   const [comparing, setComparing] = useState(false);
   const [result, setResult] = useState<ListaResult | null>(null);
@@ -54,9 +64,20 @@ export default function ListaClient({
     setItems(prev => prev.filter(p => p.canonical_name !== canonicalName));
   }, []);
 
+  // Persistir items en localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem("lista_items", JSON.stringify(items));
+    } catch {
+      // localStorage lleno o no disponible
+    }
+  }, [items]);
+
   const handleCategoryChange = useCallback((cat: string) => {
     setSelectedCategory(cat);
-    if (cat && step === "category") {
+    // Advance even when deselecting (cat="") so the user isn't stuck
+    // on the category screen with nothing selected.
+    if (step === "category") {
       setStep("products");
     }
   }, [step]);
@@ -120,6 +141,11 @@ export default function ListaClient({
     setError(null);
     setStep(initialCategories.length > 0 ? "category" : "products");
     setSelectedCategory("");
+    try {
+      localStorage.removeItem("lista_items");
+    } catch {
+      // localStorage no disponible
+    }
   }, [initialCategories.length]);
 
   const handleBackToCategory = useCallback(() => {
@@ -229,7 +255,7 @@ export default function ListaClient({
 
             {/* Category badge */}
             {selectedCategory && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <button
                   onClick={handleBackToCategory}
                   className="text-xs text-gray-400 hover:text-blue-600 transition-colors"
@@ -240,6 +266,13 @@ export default function ListaClient({
                 <span className="text-xs text-gray-400">
                   Filtrando por: <strong>{selectedCategory}</strong>
                 </span>
+                <button
+                  onClick={() => setSelectedCategory("")}
+                  className="inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                  Quitar filtro
+                </button>
               </div>
             )}
 

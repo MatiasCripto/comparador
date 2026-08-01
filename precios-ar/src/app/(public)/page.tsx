@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Header from "@/components/shared/Header";
 import {
   Card,
   CardContent,
@@ -46,10 +45,7 @@ export default function HomePage() {
   }, []);
 
   return (
-    <>
-      <Header lastScraping={stats?.lastUpdate ?? null} />
-
-      <main className="flex-1">
+    <main className="flex-1">
         {/* Hero */}
         <section className="py-16 md:py-24 text-center px-4">
           <div className="container mx-auto max-w-3xl space-y-6">
@@ -142,29 +138,5 @@ export default function HomePage() {
           </div>
         </section>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t py-8 px-4 mt-auto">
-        <div className="container mx-auto max-w-3xl text-center space-y-2">
-          <p className="text-sm text-muted-foreground">
-            PreciosAR — Precios actualizados cada 6 horas
-          </p>
-          <div className="flex justify-center gap-4 text-xs text-muted-foreground">
-            <a href="/" className="hover:text-gray-900">
-              Inicio
-            </a>
-            <a href="/buscar" className="hover:text-gray-900">
-              Buscar
-            </a>
-            <a href="/alertas" className="hover:text-gray-900">
-              Mis alertas
-            </a>
-          </div>
-          <p className="text-xs text-gray-400">
-            Los precios pueden variar. Verificá siempre en la tienda.
-          </p>
-        </div>
-      </footer>
-    </>
   );
 }

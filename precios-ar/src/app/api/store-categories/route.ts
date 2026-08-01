@@ -5,7 +5,7 @@ export async function GET() {
   try {
     const supabase = createAdminClient();
     const { data } = await supabase
-      .from("products")
+      .from("stores")
       .select("category")
       .not("category", "is", null);
 
@@ -14,11 +14,12 @@ export async function GET() {
     }
 
     const categories = [...new Set(
-      data.map(c => c.category).filter(Boolean) as string[]
+      data.map(s => s.category).filter(Boolean) as string[]
     )].sort();
 
     return NextResponse.json({ categories });
-  } catch {
+  } catch (err) {
+    console.error("[api/store-categories] error:", err);
     return NextResponse.json({ categories: [] });
   }
 }

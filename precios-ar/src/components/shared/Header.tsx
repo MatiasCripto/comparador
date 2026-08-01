@@ -1,20 +1,44 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Tag, Search, Bell, Settings, ShoppingCart, Store } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { useCallback, useState } from "react";
+import { Tag, Bell, Settings, ShoppingCart, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import ProductAutocomplete from "@/components/shared/ProductAutocomplete";
 import {
   useLocationPicker,
   LocationDialog,
   LocationBadge,
 } from "@/components/shared/LocationPicker";
+import type { SelectedProduct } from "@/types/search";
 
 export default function Header({ lastScraping }: { lastScraping?: string | null }) {
   const pathname = usePathname();
+  const router = useRouter();
   const isHome = pathname === "/";
   const loc = useLocationPicker();
+  const [headerQuery, setHeaderQuery] = useState("");
+
+  const handleHeaderSelect = useCallback(
+    (product: SelectedProduct) => {
+      const params = new URLSearchParams();
+      params.set("pid", product.product_id);
+      params.set("q", product.canonical_name);
+      router.push(`/buscar?${params.toString()}`);
+    },
+    [router]
+  );
+
+  const handleHeaderSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      const trimmed = headerQuery.trim();
+      if (!trimmed) return;
+      router.push(`/buscar?q=${encodeURIComponent(trimmed)}`);
+    },
+    [headerQuery, router]
+  );
 
   return (
     <header className="sticky top-0 z-50 border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
@@ -32,18 +56,15 @@ export default function Header({ lastScraping }: { lastScraping?: string | null 
         {/* Search bar — only when not on home */}
         {!isHome && (
           <form
-            action="/buscar"
-            method="GET"
+            onSubmit={handleHeaderSubmit}
             className="flex-1 max-w-md hidden sm:block"
           >
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                name="q"
-                placeholder="Buscá un producto..."
-                className="pl-9 h-9 text-sm rounded-lg"
-              />
-            </div>
+            <ProductAutocomplete
+              onSelect={handleHeaderSelect}
+              onQueryChange={setHeaderQuery}
+              placeholder="Buscá un producto..."
+              inputClassName="pl-9 h-9 text-sm rounded-lg"
+            />
           </form>
         )}
 

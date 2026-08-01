@@ -5,7 +5,6 @@ import { Bell, BellOff, Trash2, Mail, Clock, Store, MapPin, Tag } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import Header from "@/components/shared/Header";
 import { formatPrice, formatRelativeTime } from "@/lib/utils";
 import type { PriceAlert, Notification } from "@/types/database";
 
@@ -89,10 +88,7 @@ export default function AlertasPage() {
   const hasData = loadedEmail && (alerts.length > 0 || notifications.length > 0);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-
-      <main className="flex-1 container mx-auto px-4 py-8 max-w-xl">
+    <main className="flex-1 container mx-auto px-4 py-8 max-w-xl">
         <div className="space-y-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -259,31 +255,5 @@ export default function AlertasPage() {
           )}
         </div>
       </main>
-
-      <footer className="border-t py-8 px-4 mt-auto">
-        <div className="container mx-auto text-center space-y-2">
-          <p className="text-sm text-gray-500">
-            PreciosAR — Precios actualizados cada 6 horas
-          </p>
-          <div className="flex justify-center gap-4 text-xs text-gray-400">
-            <a href="/" className="hover:text-gray-900">
-              Inicio
-            </a>
-            <a href="/buscar" className="hover:text-gray-900">
-              Buscar
-            </a>
-            <a href="/lista" className="hover:text-gray-900">
-              Lista
-            </a>
-            <a href="/alertas" className="hover:text-gray-900">
-              Mis alertas
-            </a>
-          </div>
-          <p className="text-xs text-gray-400">
-            Los precios pueden variar. Verificá siempre en la tienda.
-          </p>
-        </div>
-      </footer>
-    </div>
-  );
+    );
 }

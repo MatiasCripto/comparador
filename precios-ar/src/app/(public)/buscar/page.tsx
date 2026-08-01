@@ -1,12 +1,13 @@
 import { createAdminClient } from "@/lib/supabase/service";
-import Header from "@/components/shared/Header";
 import BuscarClient from "@/components/buscar/BuscarClient";
 import { getUserLocation } from "@/lib/location-server";
 import { searchProducts } from "@/lib/search/search-engine";
 import type { LatestPrice } from "@/types/database";
+import type { SelectedProduct } from "@/types/search";
 
 interface SearchParams {
   q?: string;
+  pid?: string;
   provincia?: string;
   categoria?: string;
   orden?: string;
@@ -67,19 +68,42 @@ async function getStoreCategories(): Promise<string[]> {
     const supabase = createAdminClient();
     const { data } = await supabase
       .from("stores")
-      .select("scraping_config")
-      .not("scraping_config", "is", null);
+      .select("category")
+      .not("category", "is", null);
     if (!data) return [];
-    const cats = new Set<string>();
-    for (const row of data) {
-      const cfg = row.scraping_config as Record<string, unknown> | null;
-      const cat = cfg?.category as string | undefined;
-      if (cat) cats.add(cat);
-    }
-    return Array.from(cats).sort();
+    return Array.from(new Set(data.map((r) => r.category).filter(Boolean) as string[])).sort();
   } catch {
     return [];
   }
+}
+
+// Producto real seleccionado desde el autocomplete de la portada (pid exacto).
+// Devuelve todas las filas de latest_prices de ESE producto junto con el
+// SelectedProduct reconstruido.
+async function getProductByPid(
+  supabase: ReturnType<typeof createAdminClient>,
+  pid: string
+): Promise<{ product: SelectedProduct | null; prices: LatestPrice[] }> {
+  const { data } = await supabase
+    .from("latest_prices")
+    .select("*")
+    .eq("product_id", pid)
+    .order("price", { ascending: true });
+
+  if (!data || data.length === 0) return { product: null, prices: [] };
+
+  const first = data[0] as LatestPrice;
+  const product: SelectedProduct = {
+    product_id: first.product_id,
+    canonical_name: first.canonical_name,
+    raw_name: first.raw_name,
+    brand: first.brand,
+    category: first.category,
+    subcategory: null,
+    unit: first.unit,
+    quantity: first.quantity,
+  };
+  return { product, prices: data as LatestPrice[] };
 }
 
 export default async function BuscarPage({
@@ -89,21 +113,31 @@ export default async function BuscarPage({
 }) {
   const params = await searchParams;
   const q = params.q ?? "";
+  const pid = params.pid;
   const provincia = params.provincia;
   const categoria = params.categoria;
   const orden = params.orden;
   const precio_min = params.precio_min;
   const precio_max = params.precio_max;
 
-  const [categories, results] = await Promise.all([
-    getStoreCategories(),
-    q ? getInitialResults(params) : [],
-  ]);
+  const supabase = createAdminClient();
+
+  let initialProduct: SelectedProduct | null = null;
+  let initialProductResults: LatestPrice[] = [];
+  let results: LatestPrice[] = [];
+
+  if (pid) {
+    // Flujo de producto exacto (autocomplete de la portada): prioriza el pid
+    const found = await getProductByPid(supabase, pid);
+    initialProduct = found.product;
+    initialProductResults = found.prices;
+  } else if (q) {
+    results = await getInitialResults(params);
+  }
+
+  const categories = await getStoreCategories();
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-
       <BuscarClient
         initialCategories={categories}
         initialQuery={q}
@@ -113,24 +147,8 @@ export default async function BuscarPage({
         initialMinPrice={precio_min}
         initialMaxPrice={precio_max}
         initialResults={results}
+        initialProduct={initialProduct ?? undefined}
+        initialProductResults={initialProductResults}
       />
-
-      <footer className="border-t py-8 px-4 mt-auto">
-        <div className="container mx-auto text-center space-y-2">
-          <p className="text-sm text-gray-500">
-            PreciosAR — Precios actualizados cada 6 horas
-          </p>
-          <div className="flex justify-center gap-4 text-xs text-gray-400">
-            <a href="/" className="hover:text-gray-900">Inicio</a>
-            <a href="/buscar" className="hover:text-gray-900">Buscar</a>
-            <a href="/lista" className="hover:text-gray-900">Lista</a>
-            <a href="/alertas" className="hover:text-gray-900">Mis alertas</a>
-          </div>
-          <p className="text-xs text-gray-400">
-            Los precios pueden variar. Verificá siempre en la tienda.
-          </p>
-        </div>
-      </footer>
-    </div>
   );
 }

@@ -14,6 +14,10 @@ interface ProductAutocompleteProps {
   disabled?: boolean;
   /** IDs de productos ya agregados para excluir del dropdown */
   existingProductIds?: string[];
+  /** Notifica el texto tipeado (para formularios con botón de submit de texto libre) */
+  onQueryChange?: (q: string) => void;
+  /** Clases extra para el Input (permite variar tamaño en el hero de la portada) */
+  inputClassName?: string;
 }
 
 export default function ProductAutocomplete({
@@ -22,6 +26,8 @@ export default function ProductAutocomplete({
   placeholder = "Buscá un producto...",
   disabled = false,
   existingProductIds = [],
+  onQueryChange,
+  inputClassName = "h-10 text-sm pl-9",
 }: ProductAutocompleteProps) {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<AutocompleteSuggestion[]>([]);
@@ -104,16 +110,18 @@ export default function ProductAutocomplete({
     (s: AutocompleteSuggestion) => {
       onSelect(suggestionToProduct(s));
       setQuery("");
+      onQueryChange?.("");
       setSuggestions([]);
       setShowDropdown(false);
       inputRef.current?.focus();
     },
-    [onSelect, suggestionToProduct]
+    [onSelect, suggestionToProduct, onQueryChange]
   );
 
   const handleQueryChange = useCallback((value: string) => {
     setQuery(value);
-  }, []);
+    onQueryChange?.(value);
+  }, [onQueryChange]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -128,12 +136,15 @@ export default function ProductAutocomplete({
           prev > 0 ? prev - 1 : suggestions.length - 1
         );
       } else if (e.key === "Enter") {
-        e.preventDefault();
         if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
+          e.preventDefault();
           selectSuggestion(suggestions[selectedIndex]);
         } else if (suggestions.length > 0) {
+          e.preventDefault();
           selectSuggestion(suggestions[0]);
         }
+        // Sin sugerencias: NO prevenir default → si el componente está dentro de
+        // un form (portada/header), Enter hace submit con el texto tipeado.
       } else if (e.key === "Escape") {
         setShowDropdown(false);
       }
@@ -154,7 +165,7 @@ export default function ProductAutocomplete({
             if (suggestions.length > 0) setShowDropdown(true);
           }}
           placeholder={placeholder}
-          className="h-10 text-sm pl-9"
+          className={inputClassName}
           disabled={disabled}
         />
         {loading && (

@@ -2,9 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useCallback, useEffect } from "react";
-import { Search, MapPin } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import ProductAutocomplete from "@/components/shared/ProductAutocomplete";
 import {
   Select,
   SelectContent,
@@ -14,10 +14,11 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { PROVINCES } from "@/lib/location";
+import type { SelectedProduct } from "@/types/search";
 
 export default function HeroSearchForm() {
   const router = useRouter();
-  const [query, setQuery] = useState("");
+  const [typedQuery, setTypedQuery] = useState("");
   const [province, setProvince] = useState("");
   const [categories, setCategories] = useState<{ label: string; slug: string }[]>([]);
 
@@ -35,10 +36,24 @@ export default function HeroSearchForm() {
       .catch(() => {});
   }, []);
 
+  // Producto real seleccionado del autocomplete → /buscar con product_id exacto
+  const handleProductSelect = useCallback(
+    (product: SelectedProduct) => {
+      const params = new URLSearchParams();
+      params.set("pid", product.product_id);
+      params.set("q", product.canonical_name);
+      if (province) params.set("provincia", province);
+
+      router.push(`/buscar?${params.toString()}`);
+    },
+    [province, router]
+  );
+
+  // Botón "Buscar": texto libre (sin selección de autocomplete)
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      const trimmed = query.trim();
+      const trimmed = typedQuery.trim();
       if (!trimmed) return;
 
       const params = new URLSearchParams();
@@ -47,7 +62,7 @@ export default function HeroSearchForm() {
 
       router.push(`/buscar?${params.toString()}`);
     },
-    [query, province, router]
+    [typedQuery, province, router]
   );
 
   const handleCategoryClick = useCallback(
@@ -64,15 +79,12 @@ export default function HeroSearchForm() {
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscá un producto... (ej: cemento, pintura látex, yerba)"
-            className="pl-12 h-14 text-base rounded-xl border-2 focus-visible:ring-blue-500"
-          />
-        </div>
+        <ProductAutocomplete
+          onSelect={handleProductSelect}
+          onQueryChange={setTypedQuery}
+          placeholder="Buscá un producto... (ej: cemento, pintura látex, yerba)"
+          inputClassName="pl-12 h-14 text-base rounded-xl border-2 focus-visible:ring-blue-500"
+        />
 
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex items-center gap-2 flex-1">
