@@ -4,6 +4,7 @@ import { ArrowLeft, Package, ExternalLink, Tag, Store } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/service";
 import { slugify } from "@/lib/slug";
 import { formatPrice, externalUrl } from "@/lib/utils";
+import OffEnqueuer from "@/components/shared/OffEnqueuer";
 import type { LatestPrice } from "@/types/database";
 
 const ITEMS_PER_PAGE = 50;
@@ -162,6 +163,9 @@ export default async function StorePage({
             </div>
           )}
         </div>
+
+        {/* Encolar para enriquecimiento OFF (fire-and-forget) */}
+        <OffEnqueuer productIds={products.map((p) => p.product_id)} />
       </div>
     </div>
   );

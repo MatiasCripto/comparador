@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isHolidayToday } from "@/lib/holidays";
 
 export async function POST(request: NextRequest) {
   try {
@@ -7,6 +8,14 @@ export async function POST(request: NextRequest) {
 
     if (!store_id) {
       return NextResponse.json({ error: "store_id requerido" }, { status: 400 });
+    }
+
+    // Guard: no se disparan scrapers en feriados nacionales.
+    if (await isHolidayToday()) {
+      return NextResponse.json(
+        { skipped: true, reason: "feriado", store_id },
+        { status: 200 }
+      );
     }
 
     const webhookUrl = process.env.N8N_WEBHOOK_URL;

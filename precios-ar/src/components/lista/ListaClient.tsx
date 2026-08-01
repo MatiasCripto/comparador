@@ -7,6 +7,7 @@ import CategorySelector from "./CategorySelector";
 import ProductSearchInput from "./ProductSearchInput";
 import ProductList from "./ProductList";
 import StrategyResults from "./StrategyResults";
+import OffEnqueuer from "@/components/shared/OffEnqueuer";
 import type { SelectedProduct } from "@/types/search";
 
 type Step = "category" | "products" | "results";
@@ -203,6 +204,13 @@ export default function ListaClient({
             );
           })}
         </div>
+
+        {/* Encolar los productos agregados para enriquecimiento OFF */}
+        <OffEnqueuer
+          productIds={items
+            .map((i) => i.product_id)
+            .filter((id): id is string => Boolean(id))}
+        />
 
         {/* Step 1: Category */}
         {step === "category" && (

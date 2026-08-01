@@ -7,6 +7,10 @@ export interface Store {
   category: string | null
   province: string | null
   city: string | null
+  address: string | null
+  lat: number | null
+  lng: number | null
+  geocode_type: string | null
   logo_url: string | null
   scraping_enabled: boolean
   scraping_config: {
@@ -30,6 +34,11 @@ export interface Product {
   quantity: number | null
   product_url: string | null
   image_url: string | null
+  ean: string | null
+  off_category: string | null
+  nutriscore: string | null
+  ean_verificado: boolean
+  off_last_sync: string | null
   updated_at: string
 }
 

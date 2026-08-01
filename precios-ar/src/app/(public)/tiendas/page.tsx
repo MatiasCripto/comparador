@@ -4,6 +4,7 @@ import { Store, Package, Clock, ChevronRight } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/service";
 import { slugify } from "@/lib/slug";
 import { formatRelativeTime, formatPrice } from "@/lib/utils";
+import { getUserLocation } from "@/lib/location-server";
 import type { LatestPrice } from "@/types/database";
 
 interface StoreRow {
@@ -21,7 +22,15 @@ export const metadata = {
   description: "Todas las tiendas disponibles en PreciosAR",
 };
 
-export default async function TiendasPage() {
+export default async function TiendasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ todas?: string }>;
+}) {
+  const { todas } = await searchParams;
+  const userLoc = await getUserLocation();
+  const showAll = todas === "1" || !userLoc.province;
+
   const supabase = createAdminClient();
 
   const { data: stores, error } = await supabase
@@ -43,9 +52,17 @@ export default async function TiendasPage() {
     );
   }
 
+  // Prefiltro por provincia del usuario (tiendas null = online/nacional, siempre visibles)
+  const visibleStores = showAll
+    ? stores
+    : stores.filter(
+        (s) => !s.province || s.province === userLoc.province
+      );
+  const hasFiltered = visibleStores.length < stores.length;
+
   // Get product count per store
   const storeCounts = await Promise.all(
-    stores.map(async (store) => {
+    visibleStores.map(async (store) => {
       const { count } = await supabase
         .from("products")
         .select("*", { count: "exact", head: true })
@@ -61,7 +78,7 @@ export default async function TiendasPage() {
     .select("store_id, price")
     .in(
       "store_id",
-      stores.map((s) => s.id)
+      visibleStores.map((s) => s.id)
     )
     .order("price", { ascending: true })) as { data: LatestPrice[] | null };
   const cheapestMap = new Map<string, number>();
@@ -73,7 +90,7 @@ export default async function TiendasPage() {
 
   // Group stores by category
   const grouped = new Map<string, StoreRow[]>();
-  for (const store of stores) {
+  for (const store of visibleStores) {
     const cat = store.category || "Sin categoría";
     if (!grouped.has(cat)) grouped.set(cat, []);
     grouped.get(cat)!.push(store);
@@ -89,9 +106,23 @@ export default async function TiendasPage() {
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Tiendas</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {stores.length} tienda{stores.length !== 1 ? "s" : ""} disponibles
+            {visibleStores.length} tienda{visibleStores.length !== 1 ? "s" : ""} disponibles
           </p>
         </div>
+
+        {hasFiltered && userLoc.province && (
+          <div className="mb-8 flex items-center justify-between gap-4 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm">
+            <span>
+              Mostrando tiendas de <strong>{userLoc.province}</strong>
+            </span>
+            <Link
+              href="/tiendas?todas=1"
+              className="text-blue-600 font-medium hover:underline shrink-0"
+            >
+              Ver todas
+            </Link>
+          </div>
+        )}
 
         {/* By category */}
         {Array.from(grouped.entries()).map(([category, catStores]) => (

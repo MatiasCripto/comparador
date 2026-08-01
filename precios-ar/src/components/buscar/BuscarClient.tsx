@@ -6,6 +6,7 @@ import CategorySelector from "@/components/lista/CategorySelector";
 import ProductAutocomplete from "@/components/shared/ProductAutocomplete";
 import SearchResults from "@/components/shared/search-results";
 import SearchFilters from "@/components/shared/search-filters";
+import OffEnqueuer from "@/components/shared/OffEnqueuer";
 import type { SelectedProduct } from "@/types/search";
 import type { LatestPrice } from "@/types/database";
 
@@ -174,6 +175,9 @@ export default function BuscarClient({
                 provincia={initialProvince}
                 categoria={selectedCategory || undefined}
               />
+              <OffEnqueuer
+                productIds={productResults.map((r) => r.product_id)}
+              />
             </div>
           </div>
         )}
@@ -195,6 +199,9 @@ export default function BuscarClient({
                 query={initialQuery}
                 provincia={initialProvince}
                 categoria={initialCategory}
+              />
+              <OffEnqueuer
+                productIds={initialResults.map((r) => r.product_id)}
               />
             </div>
           </div>

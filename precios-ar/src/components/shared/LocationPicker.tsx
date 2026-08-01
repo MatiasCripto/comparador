@@ -56,7 +56,12 @@ export function useLocationPicker() {
     setSavedProvince(existing);
     setProvince(existing || "");
     if (!existing) {
-      setOpen(true);
+      // Darle tiempo a BigDataCloud (useUserLocation) de detectar la provincia
+      // automáticamente antes de preguntar al usuario.
+      const t = setTimeout(() => {
+        if (!getCookie("user_province")) setOpen(true);
+      }, 1500);
+      return () => clearTimeout(t);
     }
   }, []);
 

@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import HeroSearchForm from "@/components/shared/hero-search-form";
+import StoreNearYou from "@/components/home/StoreNearYou";
 
 interface Stats {
   stores: number;
@@ -102,6 +103,9 @@ export default function HomePage() {
             </Card>
           </div>
         </section>
+
+        {/* Tiendas cerca de vos (BigDataCloud) */}
+        <StoreNearYou />
 
         {/* About */}
         <section className="pb-20 px-4">

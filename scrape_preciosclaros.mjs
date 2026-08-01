@@ -29,6 +29,46 @@ const RESOURCE_IDS = {
 const DATASET_ID = '6f47ec76-d1ce-4e34-a7e1-621fe9b1d0b5';
 const BATCH_SIZE = 500;
 
+const STORE_CATEGORY_RULES = [
+  { category: 'supermercados', keywords: ['supermercado', 'supermercados', 'coto', 'dia ', 'disco', 'jumbo', 'vea', 'cooperativa', 'comercializacion', 'alimenticia', 'frigorifico', 'distribuidora'] },
+  { category: 'farmacia', keywords: ['farmacia', 'farmacia', 'pharmacy'] },
+  { category: 'ferreteria', keywords: ['ferreteria', 'ferreterias', 'ferretero'] },
+  { category: 'construccion', keywords: ['corralon', 'construccion', 'materiales', 'sanitarios'] },
+  { category: 'electronica', keywords: ['electronica', 'electro', 'tecnologia', 'computacion', 'informatica', 'musimundo', 'fravega', 'garbarino'] },
+  { category: 'electrodomesticos', keywords: ['electrodomesticos', 'electrodomestico'] },
+  { category: 'muebles', keywords: ['muebles', 'muebleria', 'colchones', 'deco'] },
+  { category: 'deportes', keywords: ['deportes', 'deportivo', 'sport', 'running'] },
+  { category: 'pintureria', keywords: ['pintureria', 'pinturas'] },
+  { category: 'ceramicas', keywords: ['ceramica', 'ceramicas', 'porcelanato', 'baldosas'] },
+  { category: 'mascotas', keywords: ['mascotas', 'pet', 'animal'] },
+  { category: 'cosmeticos', keywords: ['cosmeticos', 'perfumeria', 'maquillaje'] },
+  { category: 'juguetes', keywords: ['juguetes', 'jugueteria'] },
+  { category: 'libreria', keywords: ['libreria', 'papeleria', 'papelera'] },
+  { category: 'ropa', keywords: ['ropa', 'indumentaria', 'vestimenta'] },
+  { category: 'herramientas', keywords: ['herramientas', 'ferreteria industrial'] },
+  { category: 'bebidas', keywords: ['bebidas', 'aguas', 'vinoteca'] },
+  { category: 'bebes', keywords: ['bebes', 'maternidad', 'puericultura'] },
+  { category: 'jardin', keywords: ['jardin', 'jardineria', 'vivero'] },
+];
+
+function detectStoreCategory(storeName) {
+  const text = storeName.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+
+  // First try product-based detection
+  const productCat = autoDetectCategory(storeName);
+  if (productCat) return productCat;
+
+  // Then try store-name-based rules
+  for (const rule of STORE_CATEGORY_RULES) {
+    for (const kw of rule.keywords) {
+      if (text.includes(kw)) return rule.category;
+    }
+  }
+
+  return null;
+}
+
 // ------ HELPERS ------
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -256,7 +296,7 @@ async function findOrCreateStore(brandName, sepaId, sepaBrandId, comercioUrl) {
   const newStore = {
     name: brandName.slice(0, 255),
     url: comercioUrl || 'https://www.preciosclaros.gob.ar',
-    category: 'supermercados',
+    category: detectStoreCategory(brandName) || 'supermercados',
     scraping_enabled: true,
     scraping_config: {
       platform_detected: 'SEPA',
@@ -287,6 +327,7 @@ async function processBrand(brandName, sepaId, sepaBrandId, comercioUrl, product
   console.log(`   Tienda: ${brandName}`);
 
   const storeId = await findOrCreateStore(brandName, sepaId, sepaBrandId, comercioUrl);
+  const storeCategory = detectStoreCategory(brandName) || 'supermercados';
   if (!storeId) {
     console.log(`   Error: no se pudo crear/obtener store`);
     return { products: 0, inserted: 0 };
@@ -320,7 +361,7 @@ async function processBrand(brandName, sepaId, sepaBrandId, comercioUrl, product
       store_id: storeId,
       product_url: '', // SEPA no provee URLs individuales de producto
       image_url: '',
-      category: autoDetectCategory(p.name, null, p.marca) || 'supermercados',
+      category: autoDetectCategory(p.name, null, p.marca) || storeCategory,
     };
 
     const exist = existing[p.ean];
@@ -397,6 +438,7 @@ async function processProductosStream(filepath) {
 
       const price = parsePrice(values[headers.indexOf('productos_precio_lista')]);
       if (price <= 0) return;
+      if (price < 300) return; // sanity: puede ser dato erroneo de SEPA
 
       if (!brandMaps.has(brandId)) {
         brandMaps.set(brandId, new Map());
@@ -489,11 +531,38 @@ async function findLatestResource() {
   return null;
 }
 
+// ------ FERIADOS (Nager.Date) ------
+
+async function isHolidayToday() {
+  try {
+    const year = new Date().getFullYear();
+    const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/AR`, {
+      headers: { 'User-Agent': 'PreciosAR/1.0 (precios.nexoiarg.com)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (!Array.isArray(data)) return false;
+    const today = new Date().toISOString().slice(0, 10);
+    return data.some(h => h.date === today);
+  } catch (e) {
+    console.error('No se pudo verificar feriados, se continúa:', e.message);
+    return false;
+  }
+}
+
 // ------ MAIN ------
 
 async function main() {
   const startTime = Date.now();
   console.log('--- Scraper Precios Claros (SEPA) ---\n');
+
+  // Guard: no se corre en feriados nacionales
+  console.log('Verificando feriados...');
+  if (await isHolidayToday()) {
+    console.log('Hoy es feriado nacional — scraping cancelado.');
+    return;
+  }
 
   // 1. Find latest ZIP
   console.log('Buscando último ZIP disponible...');
