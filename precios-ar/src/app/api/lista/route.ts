@@ -109,8 +109,29 @@ async function searchProduct(term: string, storeIds: string[] | null, storeCateg
   return bestGroup?.items ?? [];
 }
 
-async function getMatchingStoreIds(supabase: ReturnType<typeof createAdminClient>, userProvince: string | null): Promise<string[] | null> {
-  if (!userProvince) return null;
+async function getMatchingStoreIds(
+  supabase: ReturnType<typeof createAdminClient>,
+  userProvince: string | null
+): Promise<{ storeIds: string[] | null; storeMetadata: Map<string, { province: string | null; city: string | null; deliveryType: string | null }> }> {
+  const meta = new Map<string, { province: string | null; city: string | null; deliveryType: string | null }>();
+
+  // Fetch ALL stores with their metadata, not just matching ones
+  const { data: allStores } = await supabase
+    .from("stores")
+    .select("id, province, city, scraping_config")
+    .limit(500);
+
+  if (allStores) {
+    for (const s of allStores) {
+      meta.set(s.id, {
+        province: s.province || null,
+        city: s.city || null,
+        deliveryType: s.scraping_config?.delivery_type || null,
+      });
+    }
+  }
+
+  if (!userProvince) return { storeIds: null, storeMetadata: meta };
 
   const { data: stores } = await supabase
     .from("stores")
@@ -119,8 +140,12 @@ async function getMatchingStoreIds(supabase: ReturnType<typeof createAdminClient
       `scraping_config->>delivery_type.eq.national,province.eq.${userProvince}`
     );
 
-  if (!stores || stores.length === 0) return [];
-  return stores.map((s: { id: string }) => s.id);
+  if (!stores || stores.length === 0) return { storeIds: [], storeMetadata: meta };
+
+  return {
+    storeIds: stores.map((s: { id: string }) => s.id),
+    storeMetadata: meta,
+  };
 }
 
 /**
@@ -145,55 +170,79 @@ async function searchProductById(productId: string, storeIds: string[] | null, s
   return (data as LatestPrice[]) ?? [];
 }
 
+// Score a store: lower is better. Prefers local stores over national ones.
+function scoreStore(
+  storeId: string,
+  total: number,
+  missing: number,
+  userProvince: string | null,
+  meta: Map<string, { province: string | null; city: string | null; deliveryType: string | null }>
+): number {
+  const m = meta.get(storeId);
+  let score = 0;
+  // Base: 0-10000 from total price (capped)
+  score += Math.min(total, 10000);
+  // Heavy penalty for missing items
+  score += missing * 5000;
+  // Geographic bonus: prefer local stores (same province, local delivery)
+  if (userProvince && m) {
+    if (m.province === userProvince) {
+      score -= 2000; // big bonus for local stores
+    } else if (m.deliveryType === 'national') {
+      score -= 500; // small bonus for national delivery
+    }
+  }
+  return score;
+}
+
 function calcStrategy1(
   items: { term: string; prices: Map<string, ItemMatch> }[],
-  storeNames: Map<string, string>
+  storeNames: Map<string, string>,
+  userProvince: string | null,
+  storeMeta: Map<string, { province: string | null; city: string | null; deliveryType: string | null }>
 ): StrategyResult {
-  // Build store → items map with cheapest price per item per store
   const storeItems = new Map<string, { term: string; price: number; product_url: string | null }[]>();
-  const storeAllTerms = new Map<string, Set<string>>();
 
   for (const item of items) {
     for (const [storeId, match] of item.prices) {
       if (!storeItems.has(storeId)) storeItems.set(storeId, []);
-      if (!storeAllTerms.has(storeId)) storeAllTerms.set(storeId, new Set());
       storeItems.get(storeId)!.push({
         term: item.term,
         price: match.price,
         product_url: match.product_url,
       });
-      storeAllTerms.get(storeId)!.add(item.term);
     }
   }
 
-  // Score each store: fewest missing first, then lowest total
   const scored = Array.from(storeItems.entries())
     .map(([storeId, sItems]) => {
       const coveredTerms = new Set(sItems.map(i => i.term));
       const missing = items.filter(i => !coveredTerms.has(i.term)).map(i => i.term);
       const total = sItems.reduce((sum, i) => sum + i.price, 0);
-      return { storeId, items: sItems, total, missing };
+      return { storeId, items: sItems, total, missing: missing.length };
     })
-    .sort((a, b) => {
-      if (a.missing.length !== b.missing.length)
-        return a.missing.length - b.missing.length;
-      return a.total - b.total;
-    });
+    .map(s => ({
+      ...s,
+      geoScore: scoreStore(s.storeId, s.total, s.missing, userProvince, storeMeta),
+    }))
+    .sort((a, b) => a.geoScore - b.geoScore);
 
   const best = scored[0];
-  if (!best) {
-    return { name: "", description: "", total: 0, savings: 0, missing: [], stores: [] };
-  }
+  if (!best) return { name: "", description: "", total: 0, savings: 0, missing: [], stores: [] };
+
+  const m = storeMeta.get(best.storeId);
+  const provinceLabel = m?.province ? ` en ${m.province}` : '';
+  const storeLabel = storeNames.get(best.storeId) || best.storeId;
 
   return {
     name: "Una sola tienda",
-    description: `Comprá todo en ${storeNames.get(best.storeId) || best.storeId}`,
+    description: `Comprá todo en ${storeLabel}${provinceLabel}`,
     total: best.total,
-    savings: 0, // calculated after all strategies
-    missing: best.missing,
+    savings: 0,
+    missing: items.filter(i => !new Set(best.items.map(x => x.term)).has(i.term)).map(i => i.term),
     stores: [{
       store_id: best.storeId,
-      store_name: storeNames.get(best.storeId) || best.storeId,
+      store_name: storeLabel,
       items: best.items.map(i => ({
         name: i.term,
         price: i.price,
@@ -207,9 +256,10 @@ function calcStrategy1(
 
 function calcStrategy2(
   items: { term: string; prices: Map<string, ItemMatch> }[],
-  storeNames: Map<string, string>
+  storeNames: Map<string, string>,
+  userProvince: string | null,
+  storeMeta: Map<string, { province: string | null; city: string | null; deliveryType: string | null }>
 ): StrategyResult {
-  // Get top stores by coverage
   const storeCoverage = new Map<string, { term: string; price: number; product_url: string | null }[]>();
   for (const item of items) {
     for (const [storeId, match] of item.prices) {
@@ -231,7 +281,7 @@ function calcStrategy2(
     return { name: "", description: "", total: 0, savings: 0, missing: [], stores: [] };
   }
 
-  let bestPair: { stores: [string, string]; total: number; missing: string[]; assignments: { term: string; storeId: string; price: number; product_url: string | null }[] } | null = null;
+  let bestPair: { stores: [string, string]; total: number; missing: string[]; geoScore: number; assignments: { term: string; storeId: string; price: number; product_url: string | null }[] } | null = null;
 
   for (let i = 0; i < topStores.length; i++) {
     for (let j = i + 1; j < topStores.length; j++) {
@@ -262,11 +312,12 @@ function calcStrategy2(
       }
 
       const mCount = missing.length;
-      const bCount = bestPair ? bestPair.missing.length : Infinity;
-      const bTotal = bestPair ? bestPair.total : Infinity;
+      const geoScore = scoreStore(s1, total, mCount, userProvince, storeMeta) + scoreStore(s2, total, mCount, userProvince, storeMeta);
+      const bMCount = bestPair ? bestPair.missing.length : Infinity;
+      const bGeoScore = bestPair ? bestPair.geoScore : Infinity;
 
-      if (!bestPair || mCount < bCount || (mCount === bCount && total < bTotal)) {
-        bestPair = { stores: [s1, s2], total, missing, assignments };
+      if (!bestPair || mCount < bMCount || (mCount === bMCount && geoScore < bGeoScore)) {
+        bestPair = { stores: [s1, s2], total, missing, geoScore, assignments };
       }
     }
   }
@@ -275,19 +326,18 @@ function calcStrategy2(
     return { name: "", description: "", total: 0, savings: 0, missing: [], stores: [] };
   }
 
-  // Group assignments by store
   const storeGroups = new Map<string, { term: string; price: number; product_url: string | null }[]>();
   for (const a of bestPair.assignments) {
     if (!storeGroups.has(a.storeId)) storeGroups.set(a.storeId, []);
     storeGroups.get(a.storeId)!.push({ term: a.term, price: a.price, product_url: a.product_url });
   }
 
-  const s1Name = storeNames.get(bestPair.stores[0]) || bestPair.stores[0];
-  const s2Name = storeNames.get(bestPair.stores[1]) || bestPair.stores[1];
+  const s1Meta = storeNames.get(bestPair.stores[0]) + (storeMeta.get(bestPair.stores[0])?.province ? ' (' + storeMeta.get(bestPair.stores[0])!.province + ')' : '');
+  const s2Meta = storeNames.get(bestPair.stores[1]) + (storeMeta.get(bestPair.stores[1])?.province ? ' (' + storeMeta.get(bestPair.stores[1])!.province + ')' : '');
 
   return {
     name: "Combinar 2 tiendas",
-    description: `Partí tu compra entre ${s1Name} y ${s2Name}`,
+    description: `Partí tu compra entre ${s1Meta} y ${s2Meta}`,
     total: bestPair.total,
     savings: 0,
     missing: bestPair.missing,
@@ -307,7 +357,9 @@ function calcStrategy2(
 
 function calcStrategy3(
   items: { term: string; prices: Map<string, ItemMatch> }[],
-  storeNames: Map<string, string>
+  storeNames: Map<string, string>,
+  _userProvince: string | null,
+  _storeMeta: Map<string, { province: string | null; city: string | null; deliveryType: string | null }>
 ): StrategyResult {
   const missing: string[] = [];
   const assignments: { term: string; storeId: string; storeName: string; price: number; product_url: string | null }[] = [];
@@ -395,7 +447,7 @@ export async function POST(request: NextRequest) {
     // Read user location from cookie
     const userProvince = request.cookies.get("user_province")?.value ?? null;
     const supabase = createAdminClient();
-    const storeIds = await getMatchingStoreIds(supabase, userProvince);
+    const { storeIds, storeMetadata } = await getMatchingStoreIds(supabase, userProvince);
 
     // Search each product
     const results = await Promise.all(
@@ -437,10 +489,10 @@ export async function POST(request: NextRequest) {
       pricedItems.push({ term, prices });
     }
 
-    // Calculate strategies
-    const s1 = calcStrategy1(pricedItems, storeNames);
-    const s2 = calcStrategy2(pricedItems, storeNames);
-    const s3 = calcStrategy3(pricedItems, storeNames);
+    // Calculate strategies with geographic awareness
+    const s1 = calcStrategy1(pricedItems, storeNames, userProvince, storeMetadata);
+    const s2 = calcStrategy2(pricedItems, storeNames, userProvince, storeMetadata);
+    const s3 = calcStrategy3(pricedItems, storeNames, userProvince, storeMetadata);
 
     // Calculate savings relative to max-ahorro (s3)
     if (s3.total > 0) {
