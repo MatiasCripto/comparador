@@ -38,7 +38,8 @@ export default function ListaClient({
 }: {
   initialCategories: string[];
 }) {
-  const [step, setStep] = useState<Step>(initialCategories.length > 0 ? "category" : "products");
+  // Arranca directo en "products": la categoría es opcional, no obliga a elegirla
+  const [step, setStep] = useState<Step>("products");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [items, setItems] = useState<SelectedProduct[]>(() => {
     if (typeof window === "undefined") return [];
@@ -140,14 +141,14 @@ export default function ListaClient({
     setItems([]);
     setResult(null);
     setError(null);
-    setStep(initialCategories.length > 0 ? "category" : "products");
+    setStep("products");
     setSelectedCategory("");
     try {
       localStorage.removeItem("lista_items");
     } catch {
       // localStorage no disponible
     }
-  }, [initialCategories.length]);
+  }, []);
 
   const handleBackToCategory = useCallback(() => {
     setStep("category");
@@ -261,8 +262,8 @@ export default function ListaClient({
               loading={comparing}
             />
 
-            {/* Category badge */}
-            {selectedCategory && (
+            {/* Categoría (opcional) */}
+            {selectedCategory ? (
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <button
                   onClick={handleBackToCategory}
@@ -282,6 +283,13 @@ export default function ListaClient({
                   Quitar filtro
                 </button>
               </div>
+            ) : (
+              <button
+                onClick={() => setStep("category")}
+                className="text-xs text-gray-400 hover:text-blue-600 transition-colors"
+              >
+                Filtrar por categoría (opcional)
+              </button>
             )}
 
             {/* Compare button */}
