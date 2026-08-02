@@ -6,15 +6,20 @@ export default async function PublicLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = createAdminClient();
-  const { data: lastLog } = await supabase
-    .from("scraping_logs")
-    .select("scraped_at")
-    .order("scraped_at", { ascending: false })
-    .limit(1)
-    .single();
+  let lastScraping: string | null = null;
+  try {
+    const supabase = createAdminClient();
+    const { data: lastLog } = await supabase
+      .from("scraping_logs")
+      .select("scraped_at")
+      .order("scraped_at", { ascending: false })
+      .limit(1)
+      .single();
 
-  const lastScraping = lastLog?.scraped_at ?? null;
+    lastScraping = lastLog?.scraped_at ?? null;
+  } catch {
+    // Ignore error, continue rendering
+  }
 
   return (
     <div className="min-h-screen flex flex-col">

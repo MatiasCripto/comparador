@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Package, ExternalLink, Tag, Store } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/service";
@@ -52,13 +51,13 @@ export default async function StorePage({
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-gray-50 to-white">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Back link */}
-        <Link
+        <a
           href="/tiendas"
           className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-blue-600 transition-colors mb-6"
         >
           <ArrowLeft className="h-4 w-4" />
           Todas las tiendas
-        </Link>
+        </a>
 
         {/* Store header */}
         <div className="rounded-xl border bg-white p-6 mb-8">

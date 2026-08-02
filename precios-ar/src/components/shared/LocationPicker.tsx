@@ -50,19 +50,13 @@ export function useLocationPicker() {
   const [city, setCity] = useState("");
   const [savedProvince, setSavedProvince] = useState<string | null>(null);
 
-  // Check if location is already set
+  // Check if location is already set. NO auto-open: el modal se abría solo y
+  // tapaba los links de navegación (no dejaba entrar a /lista). La provincia
+  // se detecta sola con BigDataCloud (useUserLocation); acá solo se lee.
   useEffect(() => {
     const existing = getCookie("user_province");
     setSavedProvince(existing);
     setProvince(existing || "");
-    if (!existing) {
-      // Darle tiempo a BigDataCloud (useUserLocation) de detectar la provincia
-      // automáticamente antes de preguntar al usuario.
-      const t = setTimeout(() => {
-        if (!getCookie("user_province")) setOpen(true);
-      }, 1500);
-      return () => clearTimeout(t);
-    }
   }, []);
 
   const save = useCallback(() => {
@@ -167,7 +161,7 @@ export function LocationDialog({
   );
 }
 
-/** Small badge showing current province */
+/** Small badge showing current province (o botón para elegirla si no hay) */
 export function LocationBadge({
   province,
   onChange,
@@ -175,16 +169,14 @@ export function LocationBadge({
   province: string | null;
   onChange: () => void;
 }) {
-  if (!province) return null;
-
   return (
     <button
       onClick={onChange}
       className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 transition-colors"
-      title="Cambiar ubicación"
+      title={province ? "Cambiar ubicación" : "Elegir ubicación"}
     >
       <MapPin className="h-3 w-3" />
-      <span>{province}</span>
+      <span>{province || "Ubicación"}</span>
     </button>
   );
 }

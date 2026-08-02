@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { MapPin, ChevronRight } from "lucide-react";
 import { useUserLocation } from "@/hooks/useUserLocation";
 import { formatPrice } from "@/lib/utils";
@@ -55,13 +54,13 @@ export default function StoreNearYou() {
             <MapPin className="h-5 w-5 text-blue-600" />
             Tiendas cerca de vos
           </h2>
-          <Link href="/tiendas" className="text-sm text-blue-600 hover:underline">
+          <a href="/tiendas" className="text-sm text-blue-600 hover:underline">
             Ver todas
-          </Link>
+          </a>
         </div>
         <div className="space-y-3">
           {stores.map((s) => (
-            <Link
+            <a
               key={s.id}
               href={`/tiendas/${slugify(s.name)}`}
               className="block rounded-xl border bg-white p-4 hover:shadow-md hover:border-blue-200 transition-all group"
@@ -85,7 +84,7 @@ export default function StoreNearYou() {
                   <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-blue-500 transition-colors shrink-0" />
                 </div>
               </div>
-            </Link>
+            </a>
           ))}
         </div>
       </div>

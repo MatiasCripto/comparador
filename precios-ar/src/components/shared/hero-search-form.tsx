@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState, useCallback, useEffect } from "react";
 import { MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,7 +16,6 @@ import { PROVINCES } from "@/lib/location";
 import type { SelectedProduct } from "@/types/search";
 
 export default function HeroSearchForm() {
-  const router = useRouter();
   const [typedQuery, setTypedQuery] = useState("");
   const [province, setProvince] = useState("");
   const [categories, setCategories] = useState<{ label: string; slug: string }[]>([]);
@@ -37,6 +35,8 @@ export default function HeroSearchForm() {
   }, []);
 
   // Producto real seleccionado del autocomplete → /buscar con product_id exacto
+  // Usamos navegación completa (location.href) porque el router client-side de
+  // Next falla en el build de producción (bug conocido, ver discusión #57565).
   const handleProductSelect = useCallback(
     (product: SelectedProduct) => {
       const params = new URLSearchParams();
@@ -44,9 +44,9 @@ export default function HeroSearchForm() {
       params.set("q", product.canonical_name);
       if (province) params.set("provincia", province);
 
-      router.push(`/buscar?${params.toString()}`);
+      window.location.href = `/buscar?${params.toString()}`;
     },
-    [province, router]
+    [province]
   );
 
   // Botón "Buscar": texto libre (sin selección de autocomplete)
@@ -60,9 +60,9 @@ export default function HeroSearchForm() {
       params.set("q", trimmed);
       if (province) params.set("provincia", province);
 
-      router.push(`/buscar?${params.toString()}`);
+      window.location.href = `/buscar?${params.toString()}`;
     },
-    [typedQuery, province, router]
+    [typedQuery, province]
   );
 
   const handleCategoryClick = useCallback(
@@ -71,9 +71,9 @@ export default function HeroSearchForm() {
       params.set("categoria", slug);
       if (province) params.set("provincia", province);
 
-      router.push(`/buscar?${params.toString()}`);
+      window.location.href = `/buscar?${params.toString()}`;
     },
-    [province, router]
+    [province]
   );
 
   return (

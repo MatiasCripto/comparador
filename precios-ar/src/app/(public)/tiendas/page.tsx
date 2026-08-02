@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Store, Package, Clock, ChevronRight } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/service";
@@ -115,12 +114,12 @@ export default async function TiendasPage({
             <span>
               Mostrando tiendas de <strong>{userLoc.province}</strong>
             </span>
-            <Link
+            <a
               href="/tiendas?todas=1"
               className="text-blue-600 font-medium hover:underline shrink-0"
             >
               Ver todas
-            </Link>
+            </a>
           </div>
         )}
 
@@ -141,7 +140,7 @@ export default async function TiendasPage({
                 const cheapest = cheapestMap.get(store.id);
 
                 return (
-                  <Link
+                  <a
                     key={store.id}
                     href={`/tiendas/${slugify(store.name)}`}
                     className="block rounded-xl border bg-white p-4 hover:shadow-md hover:border-blue-200 transition-all group"
@@ -181,7 +180,7 @@ export default async function TiendasPage({
                       </div>
                       <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-blue-500 transition-colors shrink-0 ml-3" />
                     </div>
-                  </Link>
+                  </a>
                 );
               })}
             </div>

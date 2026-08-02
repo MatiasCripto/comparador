@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/service";
-import { computeRelevance } from "@/lib/search/search-engine";
+import { computeRelevance, resolveStoreCategoryIds } from "@/lib/search/search-engine";
 import { normalizeQuery } from "@/lib/search/normalize";
 import type { LatestPrice } from "@/types/database";
 import type { SelectedProduct } from "@/types/search";
@@ -71,7 +71,9 @@ async function searchProduct(term: string, storeIds: string[] | null, storeCateg
   }
 
   if (storeCategory) {
-    query = query.eq("category", storeCategory);
+    const catStoreIds = await resolveStoreCategoryIds(storeCategory);
+    if (catStoreIds.length === 0) return [];
+    query = query.in("store_id", catStoreIds);
   }
 
   const { data } = await query;
@@ -163,7 +165,9 @@ async function searchProductById(productId: string, storeIds: string[] | null, s
   }
 
   if (storeCategory) {
-    query = query.eq("category", storeCategory);
+    const catStoreIds = await resolveStoreCategoryIds(storeCategory);
+    if (catStoreIds.length === 0) return [];
+    query = query.in("store_id", catStoreIds);
   }
 
   const { data } = await query;

@@ -2,7 +2,6 @@
 
 import { SearchX } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
 
 export default function BuscarError({
   reset,
@@ -24,12 +23,12 @@ export default function BuscarError({
         <Button variant="outline" onClick={() => reset()}>
           Reintentar
         </Button>
-        <Link
+        <a
           href="/"
           className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
         >
           Volver al inicio
-        </Link>
+        </a>
       </div>
     </div>
   );

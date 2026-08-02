@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Filter, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,7 +38,6 @@ export default function SearchFilters({
   currentMinPrice?: string;
   currentMaxPrice?: string;
 }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [storeCategories, setStoreCategories] = useState<string[]>([]);
 
@@ -68,14 +67,14 @@ export default function SearchFilters({
       if (minPrice) params.set("precio_min", minPrice);
       if (maxPrice) params.set("precio_max", maxPrice);
 
-      router.push(`/buscar?${params.toString()}`);
+      window.location.href = `/buscar?${params.toString()}`;
     },
-    [currentQuery, currentProvince, currentCategory, currentSort, currentMinPrice, currentMaxPrice, router]
+    [currentQuery, currentProvince, currentCategory, currentSort, currentMinPrice, currentMaxPrice]
   );
 
   const handleClear = useCallback(() => {
-    router.push(`/buscar?q=${encodeURIComponent(currentQuery)}`);
-  }, [currentQuery, router]);
+    window.location.href = `/buscar?q=${encodeURIComponent(currentQuery)}`;
+  }, [currentQuery]);
 
   const hasFilters = currentProvince || currentCategory || currentSort || currentMinPrice || currentMaxPrice;
 

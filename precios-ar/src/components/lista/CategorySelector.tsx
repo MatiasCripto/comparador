@@ -52,6 +52,17 @@ const CATEGORY_LABELS: Record<string, string> = {
   generico: "Varios",
 };
 
+// Normaliza para deduplicar valores que solo difieren en acentos o
+// singular/plural (stores.category tiene "supermercado" y "supermercados").
+function normCat(c: string): string {
+  return c
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]/g, "")
+    .replace(/s$/, "");
+}
+
 export default function CategorySelector({
   categories,
   selected,
@@ -61,8 +72,16 @@ export default function CategorySelector({
   selected: string;
   onChange: (cat: string) => void;
 }) {
-  // Filter duplicates and normalize
-  const unique = [...new Set(categories)].sort();
+  // Deduplicar por valor normalizado (ej: "supermercado" y "supermercados" → 1 botón)
+  const seen = new Set<string>();
+  const unique = [...new Set(categories)]
+    .sort()
+    .filter((c) => {
+      const n = normCat(c);
+      if (seen.has(n)) return false;
+      seen.add(n);
+      return true;
+    });
 
   return (
     <div className="flex flex-wrap gap-2">

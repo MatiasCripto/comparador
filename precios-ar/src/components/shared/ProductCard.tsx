@@ -1,5 +1,4 @@
 import { Store, MapPin, ExternalLink, Clock, Bell } from "lucide-react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogTrigger } from "@/components/ui/dialog";
@@ -62,12 +61,12 @@ export default function ProductCard({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
             <span className="flex items-center gap-1">
               <Store className="h-3 w-3" />
-              <Link
+              <a
                 href={`/tiendas/${slugify(product.store_name)}`}
                 className="hover:text-blue-600 transition-colors"
               >
                 {product.store_name}
-              </Link>
+              </a>
             </span>
             {(product.province || product.city) && (
               <span className="flex items-center gap-1">

@@ -177,6 +177,37 @@ export function computeRelevance(
 }
 
 // ---------------------------------------------------------------------------
+// Utilidad: mapear rubro de tienda → store_ids
+// ---------------------------------------------------------------------------
+
+function normCategory(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]/g, "")
+    .replace(/s$/, "");
+}
+
+/**
+ * Resuelve un rubro de tienda (stores.category, ej "supermercado") a los
+ * store_ids que pertenecen a ese rubro. Compara de forma normalizada
+ * (acentos + singular/plural) porque stores.category y products.category
+ * usan vocabularios inconsistentes ("supermercado" vs "supermercados").
+ */
+export async function resolveStoreCategoryIds(
+  storeCategory: string
+): Promise<string[]> {
+  const supabase = createAdminClient();
+  const target = normCategory(storeCategory);
+  const { data: stores } = await supabase.from("stores").select("id, category");
+  if (!stores) return [];
+  return stores
+    .filter((s) => s.category && normCategory(s.category) === target)
+    .map((s) => s.id);
+}
+
+// ---------------------------------------------------------------------------
 // searchProducts — función principal que consulta y puntúa
 // ---------------------------------------------------------------------------
 
@@ -201,7 +232,11 @@ export async function searchProducts(
   }
 
   if (filters.category) {
-    dbQuery = dbQuery.eq("category", filters.category);
+    const catStoreIds = await resolveStoreCategoryIds(filters.category);
+    if (catStoreIds.length === 0) {
+      return { products: [], total: 0, query, attributes: extracted };
+    }
+    dbQuery = dbQuery.in("store_id", catStoreIds);
   }
 
   if (filters.province) {
@@ -309,7 +344,9 @@ export async function searchSuggestions(
     .limit(nq.length < 4 ? 20 : 40);
 
   if (storeCategory) {
-    productQuery = productQuery.eq("category", storeCategory);
+    const catStoreIds = await resolveStoreCategoryIds(storeCategory);
+    if (catStoreIds.length === 0) return [];
+    productQuery = productQuery.in("store_id", catStoreIds);
   }
 
   const { data: matchedProducts, error: productError } = await productQuery;
@@ -378,7 +415,9 @@ export async function searchProductCandidates(
     query = query.in("store_id", storeIds);
   }
   if (storeCategory) {
-    query = query.eq("category", storeCategory);
+    const catStoreIds = await resolveStoreCategoryIds(storeCategory);
+    if (catStoreIds.length === 0) return [];
+    query = query.in("store_id", catStoreIds);
   }
 
   const { data } = await query.order("price", { ascending: true });

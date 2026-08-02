@@ -1,7 +1,6 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useState } from "react";
 import { Tag, Bell, Settings, ShoppingCart, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +14,6 @@ import type { SelectedProduct } from "@/types/search";
 
 export default function Header({ lastScraping }: { lastScraping?: string | null }) {
   const pathname = usePathname();
-  const router = useRouter();
   const isHome = pathname === "/";
   const loc = useLocationPicker();
   const [headerQuery, setHeaderQuery] = useState("");
@@ -25,9 +23,9 @@ export default function Header({ lastScraping }: { lastScraping?: string | null 
       const params = new URLSearchParams();
       params.set("pid", product.product_id);
       params.set("q", product.canonical_name);
-      router.push(`/buscar?${params.toString()}`);
+      window.location.href = `/buscar?${params.toString()}`;
     },
-    [router]
+    []
   );
 
   const handleHeaderSubmit = useCallback(
@@ -35,23 +33,23 @@ export default function Header({ lastScraping }: { lastScraping?: string | null 
       e.preventDefault();
       const trimmed = headerQuery.trim();
       if (!trimmed) return;
-      router.push(`/buscar?q=${encodeURIComponent(trimmed)}`);
+      window.location.href = `/buscar?q=${encodeURIComponent(trimmed)}`;
     },
-    [headerQuery, router]
+    [headerQuery]
   );
 
   return (
     <header className="sticky top-0 z-50 border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
       <div className="container mx-auto px-4 h-16 flex items-center gap-4">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 shrink-0 group">
+        <a href="/" className="flex items-center gap-2 shrink-0 group">
           <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center group-hover:bg-blue-700 transition-colors">
             <Tag className="h-4 w-4 text-white" />
           </div>
           <span className="font-bold text-xl tracking-tight">
             Precios<span className="text-blue-600">AR</span>
           </span>
-        </Link>
+        </a>
 
         {/* Search bar — only when not on home */}
         {!isHome && (
@@ -83,37 +81,37 @@ export default function Header({ lastScraping }: { lastScraping?: string | null 
             </Badge>
           )}
 
-          <Link
+          <a
             href="/lista"
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-blue-600 transition-colors"
           >
             <ShoppingCart className="h-4 w-4" />
             <span className="hidden sm:inline">Lista</span>
-          </Link>
+          </a>
 
-          <Link
+          <a
             href="/tiendas"
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-blue-600 transition-colors"
           >
             <Store className="h-4 w-4" />
             <span className="hidden sm:inline">Tiendas</span>
-          </Link>
+          </a>
 
-          <Link
+          <a
             href="/alertas"
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-blue-600 transition-colors"
           >
             <Bell className="h-4 w-4" />
             <span className="hidden sm:inline">Mis alertas</span>
-          </Link>
+          </a>
 
-          <Link
+          <a
             href="/admin/tiendas"
             className="text-xs text-gray-300 hover:text-gray-500 transition-colors"
             title="Admin"
           >
             <Settings className="h-3.5 w-3.5" />
-          </Link>
+          </a>
         </div>
       </div>
 
